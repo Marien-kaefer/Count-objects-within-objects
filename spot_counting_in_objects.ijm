@@ -17,51 +17,36 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 */
 
 
+//Dialog.create("Please choose appropriate parameters");
+//Dialog.addMessage("You will be required to choose the Transmitted light file of the file set you wish to process. "  + "\n" + "Please choose the following parameters.");
 
 
+inputFile = File.openDialog("Choose the transmitted light file of the file set you wish to process.");
+open(inputFile); 
+file_path = File.getDirectory(inputFile);
+TL_title = File.getName(inputFile);
+
+TL_title = file_name_remove_extension(TL_title); 
+selectWindow(TL_title + ".czi"); 
+rename(TL_title); 
+file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-1))
+FL_title = file_base_title + "1"; 
 
 
-
-
-offset_TL_Fluo_x = -10; 
-offset_TL_Fluo_y = 0; 
+offset_TL_Fluo_x = -8; 
+offset_TL_Fluo_y = -10; 
 SIM_sampling = 2; 
 
 offset_TL_Fluo_x = offset_TL_Fluo_x / SIM_sampling; 
 offset_TL_Fluo_y = offset_TL_Fluo_y / SIM_sampling; 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 roiManager("reset");
-open("Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/2-2.czi");
+open(inputFile);
 originalTitle = getTitle();
 
 run("Translate...", "x=" + offset_TL_Fluo_x +" y=" + offset_TL_Fluo_y +" interpolation=None");
 //run("Brightness/Contrast...");
 run("Enhance Contrast", "saturated=0.35");
-
-
 
 run("Subtract Background...", "rolling=10 light");
 selectWindow(originalTitle);
@@ -74,19 +59,16 @@ selectWindow(originalTitle);
 setAutoThreshold("Otsu no-reset");
 run("Convert to Mask");
 
-run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");
+
+run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None"); //soft code!!!!!!!!!!!!!!!
 run("Duplicate...", " ");
 
 
-
-
 selectWindow(duplicateTitle);
-run("Find Maxima...", "prominence=100 light output=[Segmented Particles]");
+run("Find Maxima...", "prominence=100 light output=[Segmented Particles]"); 
 segmentedParticlesTitle = getTitle();
 
-run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");
-
-
+run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");//soft code!!!!!!!!!!!!!!!
 
 run("Paste Control...");
 setPasteMode("AND");
@@ -99,32 +81,35 @@ run("Select None");
 run("Analyze Particles...", "size=0.60-3.00 circularity=0.00-0.8 exclude clear add");
 
 
-
-
-
 //Parameters to adjust if required
-foci_maxima_segmentation_smoothing = 3;
-background_subtration_rolling_ball_radius = 50;
 prominence = 1000;
 
 
 
 // -- foci segmentation start
-open("Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/2-1.czi");
-FL_title = getTitle();
+open(file_path + File.separator + FL_title + ".czi");
+rename(FL_title); 
 
-//run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.35");
-number_of_bacteria = roiManager("count") + 1; 
+run("Set Measurements...", "area shape skewness kurtosis redirect=None decimal=3");
+roiManager("Deselect");
+roiManager("multi-measure measure_all");
+
+
+kurtosis = getResult("Kurt", 1);
+print("Kurtosis: " + kurtosis);
+
+number_of_bacteria = roiManager("count") ; 
 
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
-loopStop = 20; 
+loopStop = 25; 
 
 // loop to count the number of foci per cell 
 
 selectWindow(FL_title); 
 setSlice(1); 
+//run("Brightness/Contrast...");
+run("Enhance Contrast", "saturated=0.35");
 for(i=0; i<loopStop; i++) {
 //for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
@@ -134,16 +119,21 @@ for(i=0; i<loopStop; i++) {
 	run("Find Maxima...", "noise="+prominence+" output=[Point Selection]");
 	run("Add Selection...");
 }
+selectWindow(FL_title); 
 roiManager("Show None");
+run("Select None");
+run("Duplicate...", "ignore"); 
+//saveAs("Tiff", "Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/Playground/2-Ch1-w-spots.tif");
+saveAs("Tiff", file_path + File.separator + file_base_title + "Ch1-w-spots.tif");
+close();
 selectWindow("Results"); 
 run("Close");
-saveAs("Tiff", "Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/Playground/2-spots.tif");
-results_image_title = getTitle();
-
 
 run("Remove Overlay");
-selectWindow(results_image_title); 
+selectWindow(FL_title); 
 setSlice(2);  
+//run("Brightness/Contrast...");
+run("Enhance Contrast", "saturated=0.35");
 for(i=0; i<loopStop; i++) {
 //for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
@@ -153,9 +143,12 @@ for(i=0; i<loopStop; i++) {
 	run("Add Selection...");
 }
 roiManager("Show None");
+run("Select None");
+run("Duplicate...", "ignore"); 
+saveAs("Tiff", file_path + File.separator + file_base_title + "Ch2-w-spots.tif");
+close(); 
 selectWindow("Results"); 
 run("Close");
-saveAs("Tiff", "Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/Playground/2-spots.tif");
 // -- foci segmentation end
 
 
@@ -166,8 +159,14 @@ for (i = 0; i < number_of_bacteria; i++) {
 	setResult("Ch1 spot count", i, Ch1_spot_count[i]);
 	setResult("Ch2 spot count", i, Ch2_spot_count[i]);  
 }
-
-saveAs("Results", "Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/spot-counts.csv");
-selectWindow("Results"); 
-close(); 
+saveAs("Results", file_path + File.separator + file_base_title + "_spot-counts.csv");
 close("*");
+
+
+
+function file_name_remove_extension(originalTitle){
+	dotIndex = lastIndexOf(originalTitle, "." ); 
+	file_name_without_extension = substring(originalTitle, 0, dotIndex );
+	//print( "Name without extension: " + file_name_without_extension );
+	return file_name_without_extension;
+}
