@@ -33,14 +33,15 @@ file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-1))
 FL_title = file_base_title + "1"; 
 
 
-offset_TL_Fluo_x = -8; 
-offset_TL_Fluo_y = -10; 
+offset_TL_Fluo_x = 0; 
+offset_TL_Fluo_y = 0; 
 SIM_sampling = 2; 
 
 offset_TL_Fluo_x = offset_TL_Fluo_x / SIM_sampling; 
 offset_TL_Fluo_y = offset_TL_Fluo_y / SIM_sampling; 
 
 roiManager("reset");
+run("Clear Results");
 open(inputFile);
 originalTitle = getTitle();
 
@@ -79,6 +80,8 @@ run("Paste");
 run("Select None");
 
 run("Analyze Particles...", "size=0.60-3.00 circularity=0.00-0.8 exclude clear add");
+roiManager("deselect");
+roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
 
 
 //Parameters to adjust if required
@@ -89,20 +92,31 @@ prominence = 1000;
 // -- foci segmentation start
 open(file_path + File.separator + FL_title + ".czi");
 rename(FL_title); 
+//run("Subtract Background...", "rolling=5 stack");
 
 run("Set Measurements...", "area shape skewness kurtosis redirect=None decimal=3");
 roiManager("Deselect");
 roiManager("multi-measure measure_all");
 
-
-kurtosis = getResult("Kurt", 1);
-print("Kurtosis: " + kurtosis);
-
 number_of_bacteria = roiManager("count") ; 
+Ch1_kurtosis = newArray(number_of_bacteria);
+Ch1_skewness = newArray(number_of_bacteria);
+Ch2_kurtosis = newArray(number_of_bacteria);
+Ch2_skewness = newArray(number_of_bacteria);
+
+for (i = 0; i < number_of_bacteria; i++) {
+	Ch1_kurtosis[i] = getResult("Kurt", i);
+	Ch2_kurtosis[i] = getResult("Kurt", i + number_of_bacteria);
+	Ch1_skewness[i] = getResult("Skew", i);
+	Ch2_skewness[i] = getResult("Skew", i + number_of_bacteria);
+}
+
+selectWindow("Results"); 
+run("Close");
 
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
-loopStop = 25; 
+loopStop = 5; 
 
 // loop to count the number of foci per cell 
 
@@ -123,7 +137,6 @@ selectWindow(FL_title);
 roiManager("Show None");
 run("Select None");
 run("Duplicate...", "ignore"); 
-//saveAs("Tiff", "Z:/private/Marie/Image Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/Playground/2-Ch1-w-spots.tif");
 saveAs("Tiff", file_path + File.separator + file_base_title + "Ch1-w-spots.tif");
 close();
 selectWindow("Results"); 
@@ -147,22 +160,23 @@ run("Select None");
 run("Duplicate...", "ignore"); 
 saveAs("Tiff", file_path + File.separator + file_base_title + "Ch2-w-spots.tif");
 close(); 
-selectWindow("Results"); 
-run("Close");
+run("Clear Results");
 // -- foci segmentation end
 
 
-	
+run("Clear Results");
 //write results into a new results window 
 for (i = 0; i < number_of_bacteria; i++) {
 	setResult("Bacterium ID", i, i+1);
 	setResult("Ch1 spot count", i, Ch1_spot_count[i]);
 	setResult("Ch2 spot count", i, Ch2_spot_count[i]);  
+	setResult("Ch1 Kurtosis", i, Ch1_kurtosis[i]);
+	setResult("Ch1 Skewness", i, Ch1_skewness[i]);	
+	setResult("Ch2 Kurtosis", i, Ch2_kurtosis[i]);
+	setResult("Ch2 Skewness", i, Ch2_skewness[i]);
 }
-saveAs("Results", file_path + File.separator + file_base_title + "_spot-counts.csv");
+saveAs("Results", file_path + File.separator + file_base_title + "_results.csv");
 close("*");
-
-
 
 function file_name_remove_extension(originalTitle){
 	dotIndex = lastIndexOf(originalTitle, "." ); 
