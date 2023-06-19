@@ -17,14 +17,35 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 */
 
 
-//Dialog.create("Please choose appropriate parameters");
-//Dialog.addMessage("You will be required to choose the Transmitted light file of the file set you wish to process. "  + "\n" + "Please choose the following parameters.");
+#@ File (label = "Input directory", style = "open") inputFile
+#@ Integer(label="SIM sampling rate applied", value=2, min=2, max=4, style="slider") SIM_sampling
+#@ String(value="You will be required to choose the Transmitted light file of the file set you wish to process. Please choose the following parameters.", visibility="MESSAGE") message
+#@ Integer(label="TL background subtraction radius: ", value = 10) BG_subtr_radius
+#@ Integer(label="TL median filter radius: ", value = 2) median_radius
+#@ String (choices={"Otsu","Default", "Huang","Intermodes","IsoData","IJ_IsoData","Li","MaxEntropy","Mean","MinError","Minimum","Moments","Percentile","RenyiEntropy","Shanbhag","Triangle","Yen"}, style="listBox") threshold_algorithm
+#@ Integer(label="TL prominence: " , value = 100) TL_prominence
+#@ Integer(label="TL image offset in x: " , value = -2) offset_TL_Fluo_x
+#@ Integer(label="TL image offset in y: " , value = -1) offset_TL_Fluo_y
+#@ Integer(label="Ch1 Prominence: " , value = 1000) Ch1_prominence
+#@ Integer(label="Ch2_prominence: " , value = 1000) Ch2_prominence
+#@ Double(label="Bacteria size minimum: ", value = 0.6) bacteria_size_minimum
+#@ Double(label="Bacteria size maximum: ", value = 3.0) bacteria_size_maximum
+#@ Double(label="Bacteria circularity minimum: ", value = 0.0) bacteria_circularity_minimum
+#@ Double(label="Bacteria circularity maximum: ", value = 0.8) bacteria_circularity_maximum
 
 
-inputFile = File.openDialog("Choose the transmitted light file of the file set you wish to process.");
-open(inputFile); 
+
+
+
+
+
+
+
+
+run("Bio-Formats Windowless Importer", "open=[" + inputFile + "]");
 file_path = File.getDirectory(inputFile);
 TL_title = File.getName(inputFile);
+originalTitle = TL_title; 
 
 TL_title = file_name_remove_extension(TL_title); 
 selectWindow(TL_title + ".czi"); 
@@ -33,43 +54,48 @@ file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-1))
 FL_title = file_base_title + "1"; 
 
 
-offset_TL_Fluo_x = 0; 
-offset_TL_Fluo_y = 0; 
-SIM_sampling = 2; 
+//offset_TL_Fluo_x = -2; 
+//offset_TL_Fluo_y = -1; 
+
 
 offset_TL_Fluo_x = offset_TL_Fluo_x / SIM_sampling; 
 offset_TL_Fluo_y = offset_TL_Fluo_y / SIM_sampling; 
 
 roiManager("reset");
 run("Clear Results");
-open(inputFile);
+run("Bio-Formats Windowless Importer", "open=[" + inputFile + "]");
 originalTitle = getTitle();
+getDimensions(width, height, channels, slices, frames);
 
 run("Translate...", "x=" + offset_TL_Fluo_x +" y=" + offset_TL_Fluo_y +" interpolation=None");
 //run("Brightness/Contrast...");
 run("Enhance Contrast", "saturated=0.35");
 
-run("Subtract Background...", "rolling=10 light");
+run("Subtract Background...", "rolling=" + BG_subtr_radius + " light");
 selectWindow(originalTitle);
-run("Median...", "radius=2");
+run("Median...", "radius=" + median_radius);
 run("Duplicate...", " ");
 duplicateTitle = getTitle();
 
 selectWindow(originalTitle);
 //run("Threshold...");
-setAutoThreshold("Otsu no-reset");
+setAutoThreshold(threshold_algorithm + " no-reset");
 run("Convert to Mask");
 
 
-run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None"); //soft code!!!!!!!!!!!!!!!
+run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
+
+saveAs("Tiff", file_path + File.separator + file_base_title + "TL.tif");
+rename(originalTitle); 
 run("Duplicate...", " ");
 
 
 selectWindow(duplicateTitle);
-run("Find Maxima...", "prominence=100 light output=[Segmented Particles]"); 
+run("Find Maxima...", "prominence=" + TL_prominence + " light output=[Segmented Particles]"); 
 segmentedParticlesTitle = getTitle();
 
-run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");//soft code!!!!!!!!!!!!!!!
+//run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");//soft code!!!!!!!!!!!!!!!
+run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
 
 run("Paste Control...");
 setPasteMode("AND");
@@ -79,36 +105,49 @@ selectWindow(originalTitle);
 run("Paste");
 run("Select None");
 
-run("Analyze Particles...", "size=0.60-3.00 circularity=0.00-0.8 exclude clear add");
+//run("Analyze Particles...", "size=0.60-3.00 circularity=0.00-0.8 exclude clear add");
+run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_minimum + " exclude clear add");
 roiManager("deselect");
 roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
 
 
-//Parameters to adjust if required
-prominence = 1000;
-
 
 
 // -- foci segmentation start
-open(file_path + File.separator + FL_title + ".czi");
+
+run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
 rename(FL_title); 
 //run("Subtract Background...", "rolling=5 stack");
 
-run("Set Measurements...", "area shape skewness kurtosis redirect=None decimal=3");
+run("Set Measurements...", "area mean shape kurtosis redirect=None decimal=3");
 roiManager("Deselect");
 roiManager("multi-measure measure_all");
 
 number_of_bacteria = roiManager("count") ; 
 Ch1_kurtosis = newArray(number_of_bacteria);
-Ch1_skewness = newArray(number_of_bacteria);
+Ch1_mean = newArray(number_of_bacteria);
+Ch1_class = newArray(number_of_bacteria); 
 Ch2_kurtosis = newArray(number_of_bacteria);
-Ch2_skewness = newArray(number_of_bacteria);
+Ch2_mean = newArray(number_of_bacteria);
+Ch2_class = newArray(number_of_bacteria); 
 
 for (i = 0; i < number_of_bacteria; i++) {
 	Ch1_kurtosis[i] = getResult("Kurt", i);
 	Ch2_kurtosis[i] = getResult("Kurt", i + number_of_bacteria);
-	Ch1_skewness[i] = getResult("Skew", i);
-	Ch2_skewness[i] = getResult("Skew", i + number_of_bacteria);
+	if (Ch1_kurtosis[i] > 0) {
+		Ch1_class[i] = "spots";
+	} 
+	else{
+		Ch1_class[i] = "homogeneous";
+	}
+	Ch1_mean[i] = getResult("Mean", i);
+	Ch2_mean[i] = getResult("Mean", i + number_of_bacteria);
+	if (Ch2_kurtosis[i] > 0) {
+		Ch2_class[i] = "spots";
+	} 
+	else{
+		Ch2_class[i] = "homogeneous";
+	}
 }
 
 selectWindow("Results"); 
@@ -123,14 +162,14 @@ loopStop = 5;
 selectWindow(FL_title); 
 setSlice(1); 
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.35");
+run("Enhance Contrast", "saturated=0.15");
 for(i=0; i<loopStop; i++) {
 //for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
 	roiManager("rename", "Bacterium " + i + 1);
-	run("Find Maxima...", "noise="+prominence+" output=[Count]");
+	run("Find Maxima...", "noise="+Ch1_prominence+" output=[Count]");
 	Ch1_spot_count[i] = getResult("Count", i);
-	run("Find Maxima...", "noise="+prominence+" output=[Point Selection]");
+	run("Find Maxima...", "noise="+Ch1_prominence+" output=[Point Selection]");
 	run("Add Selection...");
 }
 selectWindow(FL_title); 
@@ -146,13 +185,13 @@ run("Remove Overlay");
 selectWindow(FL_title); 
 setSlice(2);  
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.35");
+run("Enhance Contrast", "saturated=0.15");
 for(i=0; i<loopStop; i++) {
 //for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
-	run("Find Maxima...", "noise="+prominence+" output=[Count]");
+	run("Find Maxima...", "noise="+Ch2_prominence+" output=[Count]");
 	Ch2_spot_count[i] = getResult("Count", i);
-	run("Find Maxima...", "noise="+prominence+" output=[Point Selection]");
+	run("Find Maxima...", "noise="+Ch2_prominence+" output=[Point Selection]");
 	run("Add Selection...");
 }
 roiManager("Show None");
@@ -169,11 +208,13 @@ run("Clear Results");
 for (i = 0; i < number_of_bacteria; i++) {
 	setResult("Bacterium ID", i, i+1);
 	setResult("Ch1 spot count", i, Ch1_spot_count[i]);
-	setResult("Ch2 spot count", i, Ch2_spot_count[i]);  
+	setResult("Ch1 mean", i, Ch1_mean[i]); 
 	setResult("Ch1 Kurtosis", i, Ch1_kurtosis[i]);
-	setResult("Ch1 Skewness", i, Ch1_skewness[i]);	
+	setResult("Ch1 Class", i , Ch1_class[i]); 
+	setResult("Ch2 spot count", i, Ch2_spot_count[i]);  
+	setResult("Ch2 mean", i, Ch2_mean[i]);
 	setResult("Ch2 Kurtosis", i, Ch2_kurtosis[i]);
-	setResult("Ch2 Skewness", i, Ch2_skewness[i]);
+	setResult("Ch2 Class", i , Ch2_class[i]); 
 }
 saveAs("Results", file_path + File.separator + file_base_title + "_results.csv");
 close("*");
