@@ -13,7 +13,7 @@ Redistribution and use in source and binary forms, with or without modification,
 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
-
+*
 */
 
 //get input parameters
@@ -36,6 +36,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #@ Double(label="Bacteria size maximum: ", value = 3.0) bacteria_size_maximum
 #@ Double(label="Bacteria circularity minimum: ", value = 0.0) bacteria_circularity_minimum
 #@ Double(label="Bacteria circularity maximum: ", value = 0.8) bacteria_circularity_maximum
+#@ Double(label="Intensity histogram kurtosis cutoff value: ", value = 3.0) kurtosis_cutoff
 
 pre_clean_up();
 //variable definitions and calculations
@@ -79,7 +80,7 @@ Ch2_class = newArray(number_of_bacteria);
 for (i = 0; i < number_of_bacteria; i++) {
 	Ch1_kurtosis[i] = getResult("Kurt", i);
 	Ch2_kurtosis[i] = getResult("Kurt", i + number_of_bacteria);
-	if (Ch1_kurtosis[i] > 0) {
+	if (Ch1_kurtosis[i] > kurtosis_cutoff) {
 		Ch1_class[i] = "spots";
 	} 
 	else{
@@ -87,7 +88,7 @@ for (i = 0; i < number_of_bacteria; i++) {
 	}
 	Ch1_mean[i] = getResult("Mean", i);
 	Ch2_mean[i] = getResult("Mean", i + number_of_bacteria);
-	if (Ch2_kurtosis[i] > 0) {
+	if (Ch2_kurtosis[i] > kurtosis_cutoff) {
 		Ch2_class[i] = "spots";
 	} 
 	else{
@@ -103,14 +104,14 @@ run("Close");
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
 loopStop = 5; 
-//loopStop = roiManager("count");
+loopStop = roiManager("count");
 
-// loop to count the number of foci per cell 
+// loop to count the number of foci per bacterium 
 
 selectWindow(FL_title); 
 setSlice(1); 
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.05");
+run("Enhance Contrast", "saturated=0.01");
 for(i=0; i<loopStop; i++) {
 	roiManager("select", i);
 	roiManager("rename", "Bacterium " + i + 1);
@@ -132,7 +133,7 @@ run("Remove Overlay");
 selectWindow(FL_title); 
 setSlice(2);  
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.05");
+run("Enhance Contrast", "saturated=0.01");
 for(i=0; i<loopStop; i++) {
 	roiManager("select", i);
 	run("Find Maxima...", "noise="+Ch2_prominence+" output=[Count]");
@@ -148,14 +149,9 @@ close();
 run("Clear Results");
 // -- foci segmentation end
 
-
 write_input_parameters_to_file(file_path, file_base_title, BG_subtr_radius, median_radius, threshold_algorithm, TL_prominence, offset_TL_Fluo_x, offset_TL_Fluo_y, Ch1_prominence, Ch2_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, number_of_bacteria); 
 assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean, Ch1_kurtosis, Ch1_class, Ch2_spot_count, Ch2_mean, Ch2_kurtosis, Ch2_class); 
-
-
-
-
-//clean_up(); 
+clean_up(); 
 
 //let user know the process has finished and how long it took
 stop = getTime(); 
@@ -200,6 +196,8 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	run("Duplicate...", " ");
 	duplicate_for_merge_Title = getTitle();
 	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
+	//run("Brightness/Contrast...");
+	resetMinAndMax();
 	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
 	temp_title = getTitle();
 	run("Split Channels");
