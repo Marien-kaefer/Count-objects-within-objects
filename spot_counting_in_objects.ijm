@@ -16,6 +16,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 */
 
+//get input parameters
 #@ String(value="Please select the transmitted light file of the file set you wish to process.", visibility="MESSAGE") message
 #@ File (label = "Transmitted light file:", style = "open") inputFile
 #@ Integer(label="SIM sampling rate applied during processing:", value=2, min=2, max=4, style="slider") SIM_sampling
@@ -27,59 +28,39 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #@ String(value="To determine the offset between the transmitted light and fluorescence channels, choose 'Yes'.", visibility="MESSAGE") message3
 #@ String(choices={"Yes", "No"}, style="radioButtonHorizontal") offset_determination_choice
 #@ String(value="If offset between the transmitted light and fluorescence channels, is known, choose 'No' above and enter values below.", visibility="MESSAGE") message4
-#@ Integer(label="TL image offset in x: " , value = -2) offset_TL_Fluo_x
-#@ Integer(label="TL image offset in y: " , value = -1) offset_TL_Fluo_y
+#@ Integer(label="TL image offset in x: " , value = 0) offset_TL_Fluo_x
+#@ Integer(label="TL image offset in y: " , value = 0) offset_TL_Fluo_y
 #@ Integer(label="Ch1 Prominence: " , value = 1000) Ch1_prominence
 #@ Integer(label="Ch2_prominence: " , value = 1000) Ch2_prominence
-#@ Double(label="Bacteria size minimum: ", value = 0.6) bacteria_size_minimum
+#@ Double(label="Bacteria size minimum: ", value = 0.8) bacteria_size_minimum
 #@ Double(label="Bacteria size maximum: ", value = 3.0) bacteria_size_maximum
 #@ Double(label="Bacteria circularity minimum: ", value = 0.0) bacteria_circularity_minimum
 #@ Double(label="Bacteria circularity maximum: ", value = 0.8) bacteria_circularity_maximum
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-start = getTime(); 
-
-offset_TL_Fluo_x = offset_TL_Fluo_x / SIM_sampling; 
-offset_TL_Fluo_y = offset_TL_Fluo_y / SIM_sampling; 
-
 pre_clean_up();
-
-//run("Bio-Formats Windowless Importer", "open=[" + inputFile + "]");
+//variable definitions and calculations
 file_path = File.getDirectory(inputFile);
 TL_title = File.getName(inputFile);
 originalTitle = TL_title; 
-
 TL_title = file_name_remove_extension(TL_title); 
-//selectWindow(TL_title + ".czi"); 
-//rename(TL_title); 
 file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-1))
 FL_title = file_base_title + "1"; 
+offset_TL_Fluo = newArray(2); 
+offset_TL_Fluo_x = offset_TL_Fluo[0] / SIM_sampling; 
+offset_TL_Fluo_y = offset_TL_Fluo[1] / SIM_sampling; 
 
+//offset determination choice conditional
+if (offset_determination_choice == "Yes") {
+	get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum); 
+	close("*");	
+	offset_TL_Fluo_x = offset_TL_Fluo[0] / SIM_sampling; 
+	offset_TL_Fluo_y = offset_TL_Fluo[1] / SIM_sampling; 
+}	
+
+start = getTime(); 
 TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum);
 
-
-
-
-	
-
-
-
-
-
-// -- foci segmentation start
-
+// -- masurements
 run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
 rename(FL_title); 
 
@@ -117,18 +98,20 @@ for (i = 0; i < number_of_bacteria; i++) {
 selectWindow("Results"); 
 run("Close");
 
+// -- foci segmentation start
+
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
 loopStop = 5; 
+//loopStop = roiManager("count");
 
 // loop to count the number of foci per cell 
 
 selectWindow(FL_title); 
 setSlice(1); 
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.15");
+run("Enhance Contrast", "saturated=0.05");
 for(i=0; i<loopStop; i++) {
-//for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
 	roiManager("rename", "Bacterium " + i + 1);
 	run("Find Maxima...", "noise="+Ch1_prominence+" output=[Count]");
@@ -149,9 +132,8 @@ run("Remove Overlay");
 selectWindow(FL_title); 
 setSlice(2);  
 //run("Brightness/Contrast...");
-run("Enhance Contrast", "saturated=0.15");
+run("Enhance Contrast", "saturated=0.05");
 for(i=0; i<loopStop; i++) {
-//for(i=0; i<roiManager("count"); i++) {
 	roiManager("select", i);
 	run("Find Maxima...", "noise="+Ch2_prominence+" output=[Count]");
 	Ch2_spot_count[i] = getResult("Count", i);
@@ -168,7 +150,6 @@ run("Clear Results");
 
 
 write_input_parameters_to_file(file_path, file_base_title, BG_subtr_radius, median_radius, threshold_algorithm, TL_prominence, offset_TL_Fluo_x, offset_TL_Fluo_y, Ch1_prominence, Ch2_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, number_of_bacteria); 
-
 assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean, Ch1_kurtosis, Ch1_class, Ch2_spot_count, Ch2_mean, Ch2_kurtosis, Ch2_class); 
 
 
@@ -183,8 +164,6 @@ duration_String = duration_conversion(duration);
 print("The processing took " + duration_conversion(duration));
 print(TimeStamp() + ": Processing of [" + originalTitle + "] complete.");
 beep();
-
-
 
 
 
@@ -217,24 +196,39 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	run("Duplicate...", " ");
 	duplicateTitle = getTitle();
 	
+	//create merged channel image
+	run("Duplicate...", " ");
+	duplicate_for_merge_Title = getTitle();
+	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
+	temp_title = getTitle();
+	run("Split Channels");
+	Ch1_title = "C1-" + temp_title;
+	Ch2_title = "C2-" + temp_title;
+	run("Merge Channels...", "c1=" + Ch1_title + " c2=" + Ch2_title + " c3=" + duplicate_for_merge_Title + " create");
+	setSlice(1);
+	run("Green");
+	setSlice(2);
+	run("Magenta");
+	setSlice(3);
+	run("Grays");
+	saveAs("Tiff", file_path + File.separator + file_base_title + "merge.tif");
+	close(); 
+	
 	selectWindow(originalTitle);
 	//run("Threshold...");
 	setAutoThreshold(threshold_algorithm + " no-reset");
 	run("Convert to Mask");
 	
-	
 	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
-	
-	saveAs("Tiff", file_path + File.separator + file_base_title + "TL.tif");
+
+	saveAs("Tiff", file_path + File.separator + file_base_title + "TL-mask.tif");
 	rename(originalTitle); 
-	run("Duplicate...", " ");
-	
 	
 	selectWindow(duplicateTitle);
 	run("Find Maxima...", "prominence=" + TL_prominence + " light output=[Segmented Particles]"); 
 	segmentedParticlesTitle = getTitle();
-	
-	//run("Size...", "width=2560 height=2560 depth=1 constrain average interpolation=None");//soft code!!!!!!!!!!!!!!!
+
 	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
 	
 	run("Paste Control...");
@@ -245,14 +239,34 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	run("Paste");
 	run("Select None");
 	
-	//run("Analyze Particles...", "size=0.60-3.00 circularity=0.00-0.8 exclude clear add");
 	run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
 	roiManager("deselect");
 	roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
-			
 }
 
+//enable user to determine the offset between the different imaging modalities 
+function get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum){
+	TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum);
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
+	//run("Brightness/Contrast...");
+	run("Enhance Contrast", "saturated=0.35");
+	roiManager("Show All");
 
+	waitForUser("Determine the offset between the TL and FL images by making a note of the number of pixels the ROI should be shifted to the right (+x), left (-x), down (+y) or up (-y). ");
+
+	title = "Please enter the offsets in x and/or y. ";
+	Dialog.create("Offset entry");
+	Dialog.addNumber("x:", offset_TL_Fluo_x);
+	Dialog.addNumber("y:", offset_TL_Fluo_y);
+	Dialog.show();
+	offset_TL_Fluo_x = Dialog.getNumber();
+	offset_TL_Fluo_y = Dialog.getNumber();
+	offset_TL_Fluo[0] = offset_TL_Fluo_x; 
+	offset_TL_Fluo[1] = offset_TL_Fluo_y;
+	return offset_TL_Fluo;
+}
+
+//write all the used input parameters into a text file
 function write_input_parameters_to_file(file_path, file_base_title, BG_sutr_radius, median_radius, threshold_algorithm, TL_prominence, offset_TL_Fluo_x, offset_TL_Fluo_y, Ch1_prominence, Ch2_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, number_of_bacteria){ 
 	parameters_output_file = File.open(file_path + File.separator + file_base_title + "-analysis_parameters.txt"); 
 	print(parameters_output_file, "TL background subtraction radius: " + BG_subtr_radius);
@@ -271,7 +285,6 @@ function write_input_parameters_to_file(file_path, file_base_title, BG_sutr_radi
 	File.close(parameters_output_file)
 }
 
-
 function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean, Ch1_kurtosis, Ch1_class, Ch2_spot_count, Ch2_mean, Ch2_kurtosis, Ch2_class){
 	run("Clear Results");
 	//write results into a new results window 
@@ -289,8 +302,6 @@ function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean,
 	saveAs("Results", file_path + File.separator + file_base_title + "_results.csv");
 	close("*");
 }
-
-
 
 // set up time string for print statements
 function TimeStamp(){
@@ -335,8 +346,7 @@ function duration_conversion(duration){
 	return duration_String;
 }
 
-
-//clean up: close results window, close image window
+//clean up: close results window, close all open image windows
 function clean_up(){
 	close("*");
 	run("Clear Results");
