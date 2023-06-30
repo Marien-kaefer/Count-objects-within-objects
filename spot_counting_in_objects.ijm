@@ -44,7 +44,7 @@ file_path = File.getDirectory(inputFile);
 TL_title = File.getName(inputFile);
 originalTitle = TL_title; 
 TL_title = file_name_remove_extension(TL_title); 
-file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-1))
+file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-2))
 FL_title = file_base_title + "1"; 
 offset_TL_Fluo = newArray(2); 
 offset_TL_Fluo_x = offset_TL_Fluo[0] / SIM_sampling; 
@@ -124,7 +124,7 @@ selectWindow(FL_title);
 roiManager("Show None");
 run("Select None");
 run("Duplicate...", "ignore"); 
-saveAs("Tiff", file_path + File.separator + file_base_title + "Ch1-w-spots.tif");
+saveAs("Tiff", file_path + File.separator + file_base_title + "_Ch1-w-spots.tif");
 close();
 selectWindow("Results"); 
 run("Close");
@@ -144,7 +144,7 @@ for(i=0; i<loopStop; i++) {
 roiManager("Show None");
 run("Select None");
 run("Duplicate...", "ignore"); 
-saveAs("Tiff", file_path + File.separator + file_base_title + "Ch2-w-spots.tif");
+saveAs("Tiff", file_path + File.separator + file_base_title + "_Ch2-w-spots.tif");
 close(); 
 run("Clear Results");
 // -- foci segmentation end
@@ -210,7 +210,7 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	run("Magenta");
 	setSlice(3);
 	run("Grays");
-	saveAs("Tiff", file_path + File.separator + file_base_title + "merge.tif");
+	saveAs("Tiff", file_path + File.separator + file_base_title + "_merge.tif");
 	close(); 
 	
 	selectWindow(originalTitle);
@@ -220,7 +220,7 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	
 	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
 
-	saveAs("Tiff", file_path + File.separator + file_base_title + "TL-mask.tif");
+	saveAs("Tiff", file_path + File.separator + file_base_title + "_TL-mask.tif");
 	rename(originalTitle); 
 	
 	selectWindow(duplicateTitle);
@@ -266,7 +266,7 @@ function get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offse
 
 //write all the used input parameters into a text file
 function write_input_parameters_to_file(file_path, file_base_title, BG_sutr_radius, median_radius, threshold_algorithm, TL_prominence, offset_TL_Fluo_x, offset_TL_Fluo_y, Ch1_prominence, Ch2_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, number_of_bacteria){ 
-	parameters_output_file = File.open(file_path + File.separator + file_base_title + "-analysis_parameters.txt"); 
+	parameters_output_file = File.open(file_path + File.separator + file_base_title + "_analysis_parameters.txt"); 
 	print(parameters_output_file, "TL background subtraction radius: " + BG_subtr_radius);
     print(parameters_output_file, "TL median filter radius: " + median_radius);
     print(parameters_output_file, "Threshold algorithm: " + threshold_algorithm);
