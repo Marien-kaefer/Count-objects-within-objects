@@ -103,7 +103,7 @@ run("Close");
 
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
-loopStop = 5; 
+//loopStop = 5; 
 loopStop = roiManager("count");
 
 // loop to count the number of foci per bacterium 
