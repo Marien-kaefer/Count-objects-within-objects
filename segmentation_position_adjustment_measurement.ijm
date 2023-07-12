@@ -1,13 +1,12 @@
 FileList = getList("image.titles");
 //Array.print(FileList);
 
-
 title = "Files and Parameters";
 Dialog.create("Calibration Dialog");
 Dialog.addChoice("Transmitted light file", FileList);
 Dialog.addChoice("Fluorescence file", FileList);
 Dialog.addNumber("Transmitted light prominence", 500);
-Dialog.addNumber("SIM prominence", 10000);
+Dialog.addNumber("SIM prominence", 5000);
 Dialog.addNumber("Bacteria size minimum: ", 0.3)
 Dialog.addNumber("Bacteria size maximum: ", 2.0) 
 Dialog.show();
@@ -126,15 +125,23 @@ for (i=0; i<number_of_ROI; i++) {
 
 roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
 //measure parameters
+setSlice(1); 
 run("Set Measurements...", "area mean standard modal min shape integrated median skewness kurtosis redirect=None decimal=3");
 roiManager("Deselect");
 roiManager("multi-measure");
-saveAs("Results", file_path + File.separator + file_base_title + "_results.csv");
+saveAs("Results", file_path + File.separator + file_base_title + "_SR-results.csv");
 run("Clear Results");
 
-prominence = 10000; 
+setSlice(2); 
+run("Set Measurements...", "area mean standard modal min shape integrated median skewness kurtosis redirect=None decimal=3");
+roiManager("Deselect");
+roiManager("multi-measure");
+saveAs("Results", file_path + File.separator + file_base_title + "_WF-results.csv");
+run("Clear Results");
+
 Ch1_spot_count = newArray(number_of_ROI); 
 //count spots in bacteria
+setSlice(1); 
 for(i=0; i<number_of_ROI; i++) {
 	roiManager("select", i);
 	run("Find Maxima...", "noise="+Ch1_prominence+" output=[Count]");
@@ -149,5 +156,25 @@ close("Results");
 selectWindow(fluorescenceStack); 
 saveAs("Tiff", file_path + File.separator + file_base_title + "_w-spots.tif");
 
+close("*");
+
+open(file_path + File.separator + TL_original_title);
+makeRectangle(rectangle_x, rectangle_y, rectangle_width , rectangle_height);
+run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
+run("Translate...", "x=" + ROI_movement_x + " y=" + ROI_movement_y + " interpolation=None");
+open(file_path + File.separator + FL_original_title);
+run("Split Channels");
+run("Merge Channels...", "c1=[" + TL_original_title + "] c2=[C1-" + FL_original_title + "] c3=[C2-" + FL_original_title+ "] create");
+setSlice(1);
+run("Grays");
+setSlice(2);
+run("Green");
+setSlice(3);
+run("Magenta");
+saveAs("Tiff", file_path + File.separator + file_base_title + "_merge.tif");
+
+
 roiManager("reset");
 close("*");
+print("All done"); 
+beep(); 
