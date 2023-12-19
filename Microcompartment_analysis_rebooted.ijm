@@ -39,11 +39,13 @@ TL_title_no_ext = file_name_remove_extension(TL_title);
 file_base_title = substring(TL_title_no_ext, 0, (lengthOf(TL_title_no_ext)-2));
 FL_title_no_ext = file_base_title + "-1"; 
 FL_title = FL_title_no_ext + ".czi";
+ROI_set_title = file_base_title + "_bacteriaROIs.zip"; 
+ROI_set_combined_title = file_base_title + "_bacteriaROIs-combined.roi";
 
 TL_scaled_title = scaling_TL_image(file_path, TL_title, FL_title);
 TL_scaled_mask = segment_TL_image(TL_scaled_title, classifier_file); 
-determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext);
-
+ROI_set_title = determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext, ROI_set_title, ROI_set_combined_title);
+spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title);
 
 //let user know the process has finished and how long it took
 stop = getTime(); 
@@ -148,7 +150,7 @@ function segment_TL_image(TL_scaled_title, classifier_file){
 	return TL_scaled_mask; 
 	}
 
-function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext){
+function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext, ROI_set_title, ROI_set_combined_title){
 	selectWindow(TL_scaled_mask); 
 	setAutoThreshold("Default dark");
 	//run("Threshold...");
@@ -189,24 +191,214 @@ function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, ba
 	  roiManager('update');
 	}
 	roiManager("deselect");
-	roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
+	roiManager("save", file_path + File.separator + ROI_set_title);
 	roiManager("combine");
 	roiManager("add");
 	ROI_count = roiManager("count") - 1;
 	roiManager("select", ROI_count);
-	roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs-combined.roi");
+	roiManager("save", file_path + File.separator + ROI_set_combined_title);
 	
 	selectWindow(TL_scaled_title); 
 	run("Translate...", "x=" + ROI_movement_x +" y=" + ROI_movement_y +" interpolation=None");
 	saveAs("Tiff", file_path + File.separator + TL_title_no_ext + "_scaled.tif");
-	//offset_TL_Fluo[0] = ROI_movement_x; 
-	//offset_TL_Fluo[1] = ROI_movement_y;
-	//return offset_TL_Fluo;
+	close(); 
+	selectWindow(TL_scaled_mask); 
+	close(); 
+	roiManager("reset");
+	run("Select None");	
+	return ROI_set_title; 
+}
+
+function spot_counting(){
 	
 }
 
 
+function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title){
+	//generate mask of bacteria bodies
+	selectWindow(FL_title); 
+	getDimensions(width, height, channels, slices, frames);
+	FL_channels = channels; 
+	FL_width = width; 
+	FL_height = height;
+	newImage("Untitled", "8-bit black", FL_width, FL_height, 1);
+	
+	roiManager("Open", file_path + File.separator + ROI_set_combined_title);
+	roiManager("select", 0);
+	run("Add...", "value=255");
+	bacteria_mask_file_title = file_base_title + "_baceria_bodies";
+	rename(bacteria_mask_file_title); 
+	run("Select None");
+	
+	//generate point masks of spots inside bacteria
+	selectWindow(FL_title);
+	roiManager("select", 0);
+	run("Clear Outside", "stack");
+	roiManager("reset");
+	run("Select None");
+	
+	spots_image_title = "Spots-locations";
+	spots_file_title = file_base_title + "_spots_locations";
+	newImage(spots_file_title, "8-bit grayscale-mode", FL_width, FL_height, FL_channels, 1, 1);
+	
+	for (i = 0; i < channels; i++) {
+		channel_prominence_variable_name = "Ch" + (i+1) + "_prominence";
+		//print(channel_prominence_variable_name); 
+		points_file_title = "Channel" + (i+1) + "_points.roi";
+		spots_file_title = file_base_title + "_spots_locations";
+		
+		selectWindow(FL_title);
+		setSlice(i+1); 
+		run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Point Selection]");
+		roiManager("Add");
+		roiManager("select", i);
+		roiManager("save", file_path + File.separator + points_file_title);
+		
+		selectWindow(spots_file_title);
+		setSlice(i+1); 
+		roiManager("select", i);
+		run("Draw", "slice");
+		run("Subtract...", "value=254");
 
+	}
+	run("Select None");
+	roiManager("reset");
+	selectWindow(spots_file_title);
+	saveAs("Tiff", file_path + File.separator + spots_file_title + ".tif");
+	rename(spots_file_title); 
+	//clean up; 
+	selectWindow(FL_title); 
+	close(); 
+	selectWindow(TL_title); 
+	close(); 
+
+
+
+
+	//set parameters for heatmap and create empty first heatmap image
+	aspect_ratio = 3.0;  
+	heatmap_height = 50; 
+	heatmap_width = Math.ceil(heatmap_height * aspect_ratio);
+	roiManager("open", file_path + File.separator + ROI_set_title);
+	ROI_initial_count = roiManager("count");
+	//ROI_initial_count = 5;		
+	
+	for (i = 0; i < channels; i++) {
+		old_heatmap = file_base_title + "_Ch_" + (i+1) + "_Heat Map_0";
+		newImage(old_heatmap, "32-bit black", heatmap_width, heatmap_height, 1);
+		run("mpl-viridis");
+		rename(old_heatmap);
+		run("Set Measurements...", "fit display redirect=None decimal=3");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		//loop over all ROIs
+		for (k = 0; k < ROI_initial_count; k++) {
+		//for (k = 86; k < 103; k++) {
+		
+			// select ROI
+			ROI_of_choice = k;
+			print("Processing object " + (k+1) +"/" + ROI_initial_count + ", Channel " + (i+1)); 
+			
+			//duplicate signal of fluorescence channels 
+			selectWindow(spots_file_title); 
+			roiManager("select", ROI_of_choice);
+			object_angle = getValue("Angle");
+			//print("Object angle: " + object_angle);
+			
+			run("Duplicate...", " duplicate channels=" + (i+1) + " title=Spots_ROI_CH" + (i+1) + "_bacterium_" + k);
+			
+			//rotate duplicated bacterial spots image by fit ellipse angle
+			run("Rotate... ", "angle=" + object_angle + " grid=1 interpolation=None enlarge"); 
+			rotated_single_object_spots_input = getTitle();
+			
+			selectWindow(bacteria_mask_file_title); 
+			roiManager("select", ROI_of_choice);
+			run("Duplicate...", "title=Mask_ROI_" + k);
+			run("Clear Outside");
+			run("Rotate... ", "angle=" + object_angle + " grid=1 interpolation=None enlarge"); //rotate duplicated bacterium image by fit ellipse angle
+			rotated_single_object_mask = getTitle();
+			
+			 
+			roiManager("deselect");
+			//create new ROI from mask
+			selectWindow(rotated_single_object_mask);
+			setAutoThreshold("Default dark no-reset");
+			//run("Threshold...");
+			//setThreshold(255, 255);
+			run("Convert to Mask");
+			roiManager("deselect");
+			run("Select None");
+			run("Analyze Particles...", "size=0.8-Infinity add");
+		
+			selectWindow(rotated_single_object_spots_input); 
+			ROI_new_count =  roiManager("count") - 1;
+			roiManager("select", ROI_new_count);
+			run("Duplicate...", "duplicate title=final_rotated_spots");
+			final_rotated_spots_title = getTitle();
+		
+			//scale image to certain aspect ratio --> check with Mengru which aspect ratio is desired
+			run("Size...", "width=" + heatmap_width + " height=" + heatmap_height + " depth=1 average interpolation=None");
+			resized_rotated_spots_title = getTitle();
+			//run("Duplicate...", " ");
+
+			//final_spots_image = getTitle(); 
+			old_heatmap = file_base_title + "_Ch_" + (i+1) + "_Heat Map_" + k;
+			//print("Old heat map: " + old_heatmap); 
+			
+			imageCalculator("Add 32-bit", old_heatmap, resized_rotated_spots_title);
+			//new_heatmap = "Heat Map_Ch_" + (i+1) + "_" + (k+1); 
+			new_heatmap = file_base_title + "_Ch_" + (i+1) + "_Heat Map_" + (k+1);
+			//print("New heat map: " + new_heatmap); 
+			rename(new_heatmap); 
+			selectWindow(old_heatmap); 
+			close(); 
+			selectWindow(rotated_single_object_spots_input); 
+			close();
+			selectWindow(rotated_single_object_mask);
+			close();
+			//selectWindow(final_rotated_spots_title);
+			//close();
+			selectWindow(resized_rotated_spots_title); 
+			close(); 
+			
+			roiManager("deselect");
+		
+		}
+
+		selectWindow(new_heatmap); 
+		saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
+
+
+
+
+
+
+
+
+
+
+
+
+
+	}
+	
+
+	
+
+}
 
 
 
