@@ -1,7 +1,7 @@
 /*
 Macro to segment bacteria using the transmitted light channels and count the number of puncta per bacterium in two fluorescence channels.
 
-												- Written by Marie Held [mheldb@liverpool.ac.uk] June 2023
+												- Written by Marie Held [mheldb@liverpool.ac.uk] December 2023
 												  Liverpool CCI (https://cci.liverpool.ac.uk/)
 ________________________________________________________________________________________________________________________
 
@@ -19,6 +19,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 //get input parameters
 #@ String(value="Please select the transmitted light file of the file set you wish to process.", visibility="MESSAGE") message
 #@ File (label = "Transmitted light file:", style = "open") inputFile
+#@ String (label = "Microcompartment Analysis to be performed", choices={"Counting","Heat Map"}, style="listBox") analysis_choice
+#@ String(label = "Path to TL classifier file: ", description = "Z:/private/Marie/Image_Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/Labkit/bacteria_TL_segmentation_2560.classifier") classifier_file
 #@ Integer(label="SIM sampling rate applied during processing:", value=2, min=2, max=4, style="slider") SIM_sampling
 #@ String(value="Please choose the following processing parameters.", visibility="MESSAGE") message2
 #@ Integer(label="TL background subtraction radius: ", value = 10) BG_subtr_radius
@@ -43,26 +45,37 @@ pre_clean_up();
 file_path = File.getDirectory(inputFile);
 TL_title = File.getName(inputFile);
 originalTitle = TL_title; 
-TL_title = file_name_remove_extension(TL_title); 
-file_base_title = substring(TL_title, 0, (lengthOf(TL_title)-2))
-FL_title = file_base_title + "-1"; 
+TL_title_no_ext = file_name_remove_extension(TL_title); 
+file_base_title = substring(TL_title_no_ext, 0, (lengthOf(TL_title_no_ext)-2));
+FL_title_no_ext = file_base_title + "-1"; 
+FL_title = FL_title_no_ext + ".czi";
 offset_TL_Fluo = newArray(2); 
 offset_TL_Fluo_x = offset_TL_Fluo[0] / SIM_sampling; 
 offset_TL_Fluo_y = offset_TL_Fluo[1] / SIM_sampling; 
 
+ 
+start = getTime(); 
+
+run("Bio-Formats Windowless Importer", "open=[" + inputFile + "]");
+run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + "]");
+//rename(FL_title_no_ext); 
+SIM_to_TL = TL_scaling(TL_title, FL_title);
+
 //offset determination choice conditional
 if (offset_determination_choice == "Yes") {
-	get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum); 
+	get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, SIM_to_TL); 
 	close("*");	
 	offset_TL_Fluo_x = offset_TL_Fluo[0] / SIM_sampling; 
 	offset_TL_Fluo_y = offset_TL_Fluo[1] / SIM_sampling; 
 }	
 
-start = getTime(); 
-TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum);
+
+
+
+resized_TL = TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, SIM_to_TL);
 
 // -- masurements
-run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
+run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + "]");
 rename(FL_title); 
 
 run("Set Measurements...", "area mean shape kurtosis redirect=None decimal=3");
@@ -103,12 +116,11 @@ run("Close");
 
 Ch1_spot_count = newArray(number_of_bacteria);
 Ch2_spot_count = newArray(number_of_bacteria);
-//loopStop = 5; 
-loopStop = roiManager("count");
+loopStop = 5; 
+//loopStop = roiManager("count");
 
 // loop to count the number of foci per bacterium 
-
-selectWindow(FL_title); 
+selectWindow(FL_title_no_ext); 
 setSlice(1); 
 //run("Brightness/Contrast...");
 run("Enhance Contrast", "saturated=0.01");
@@ -131,6 +143,7 @@ run("Close");
 
 run("Remove Overlay");
 selectWindow(FL_title); 
+
 setSlice(2);  
 //run("Brightness/Contrast...");
 run("Enhance Contrast", "saturated=0.01");
@@ -177,17 +190,21 @@ function file_name_remove_extension(originalTitle){
 	return file_name_without_extension;
 }
 
-function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum){
+function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, SIM_to_TL){
 	run("Bio-Formats Windowless Importer", "open=[" + inputFile + "]");
+	//selectWindow(TL_title);
+	run("Duplicate...", " ");
+	originalDuplicate = getTitle();
+	
 	
 	getDimensions(width, height, channels, slices, frames);
 	
-	run("Translate...", "x=" + offset_TL_Fluo_x +" y=" + offset_TL_Fluo_y +" interpolation=None");
+	
 	//run("Brightness/Contrast...");
 	run("Enhance Contrast", "saturated=0.35");
 	
 	run("Subtract Background...", "rolling=" + BG_subtr_radius + " light");
-	selectWindow(originalTitle);
+	selectWindow(originalDuplicate);
 	run("Median...", "radius=" + median_radius);
 	run("Duplicate...", " ");
 	duplicateTitle = getTitle();
@@ -195,15 +212,18 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	//create merged channel image
 	run("Duplicate...", " ");
 	duplicate_for_merge_Title = getTitle();
-	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
+	
+	run("Size...", "width=" + (SIM_to_TL * width) + " height=" + (SIM_to_TL * width) + " depth=1 constrain average interpolation=None");
+	resized_TL = getTitle();
+	
 	//run("Brightness/Contrast...");
 	resetMinAndMax();
-	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + "]");
 	temp_title = getTitle();
 	run("Split Channels");
 	Ch1_title = "C1-" + temp_title;
 	Ch2_title = "C2-" + temp_title;
-	run("Merge Channels...", "c1=" + Ch1_title + " c2=" + Ch2_title + " c3=" + duplicate_for_merge_Title + " create");
+	run("Merge Channels...", "c1=" + Ch1_title + " c2=" + Ch2_title + " c3=" + duplicate_for_merge_Title + " create keep");
 	setSlice(1);
 	run("Green");
 	setSlice(2);
@@ -212,55 +232,124 @@ function TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subt
 	run("Grays");
 	saveAs("Tiff", file_path + File.separator + file_base_title + "_merge.tif");
 	close(); 
+	selectWindow(Ch1_title);
+	close(); 
+	selectWindow(Ch2_title);
+	close(); 
 	
+	//segment TL using trained Labkit classifier
 	selectWindow(originalTitle);
+	//classifier_file = "Y:/private/Marie/Image_Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/Labkit/bacteria_TL_segmentation.classifier";
+	run("Segment Image With Labkit", "segmenter_file=" + classifier_file + " use_gpu=false");
+	run("Size...", "width=" + (SIM_to_TL * width) + " height=" + (SIM_to_TL * width) + " depth=1 constrain average interpolation=None");
+
+	setAutoThreshold("Default dark");
 	//run("Threshold...");
-	setAutoThreshold(threshold_algorithm + " no-reset");
-	run("Convert to Mask");
-	
-	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
-
-	saveAs("Tiff", file_path + File.separator + file_base_title + "_TL-mask.tif");
-	rename(originalTitle); 
-	
-	selectWindow(duplicateTitle);
-	run("Find Maxima...", "prominence=" + TL_prominence + " light output=[Segmented Particles]"); 
-	segmentedParticlesTitle = getTitle();
-
-	run("Size...", "width=" + (SIM_sampling * width) + " height=" + (SIM_sampling * width) + " depth=1 constrain average interpolation=None");
-	
-	run("Paste Control...");
-	setPasteMode("AND");
-	selectWindow(segmentedParticlesTitle); 
-	run("Copy");
-	selectWindow(originalTitle);
-	run("Paste");
-	run("Select None");
-	
+	run("Convert to Mask"); 
 	run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
-	roiManager("deselect");
-	roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
+	//roiManager("deselect");
+	//roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
+	return resized_TL
 }
 
+
+
+
+
+
+
+
+
+function TL_scaling(TL_title, FL_title){
+	selectWindow(TL_title); 
+	getDimensions(width, height, channels, slices, frames);
+	TL_width = width; 
+	TL_height = height; 
+	getPixelSize(unit, pixelWidth, pixelHeight);
+	TL_pixelWidth = pixelWidth;
+	TL_pixelHeight = pixelHeight; 
+	
+	TL_original_title = getTitle();
+
+	
+	selectWindow(FL_title); 
+	
+	getDimensions(width, height, channels, slices, frames);
+	SIM_width = width; 
+	SIM_height = height; 
+	getPixelSize(unit, pixelWidth, pixelHeight);
+	SIM_pixelWidth = pixelWidth;
+	SIM_pixelHeight = pixelHeight; 
+	
+	SIM_to_TL = SIM_width / TL_width; 
+	scale_factor = (TL_pixelWidth / SIM_pixelWidth) / SIM_to_TL ;
+	print("Scale factor " + scale_factor); 
+	rectangle_width = floor(TL_width / scale_factor);
+	print("Rectangle width " + rectangle_width); 
+	rectangle_height = floor(TL_height / scale_factor);
+	print("Rectangle height " + rectangle_height); 
+	rectangle_x = (TL_width - rectangle_width)/2;
+	print("Rectangle x " + rectangle_x); 
+	rectangle_y = (TL_height - rectangle_height)/2;
+	print("Rectangle x " + rectangle_x);  
+	
+	selectWindow(TL_original_title); 
+	//waitForUser; 
+	//makeRectangle(rectangle_x, rectangle_y, rectangle_width , rectangle_height);
+	//waitForUser; 
+	run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
+	run("Duplicate...", " ");
+	TL_crop_title = getTitle();
+
+	return SIM_to_TL 
+
+}
+
+
+
+
 //enable user to determine the offset between the different imaging modalities 
-function get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum){
-	TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum);
-	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + ".czi]");
+function get_channel_offset(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, offset_TL_Fluo, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, SIM_to_TL){
+	resized_TL = TL_preprocessing(inputFile, offset_TL_Fluo_x, offset_TL_Fluo_y, BG_subtr_radius, originalTitle, threshold_algorithm, SIM_sampling, file_path, file_base_title, TL_prominence, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, SIM_to_TL);
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + "]");
 	//run("Brightness/Contrast...");
 	run("Enhance Contrast", "saturated=0.35");
 	roiManager("Show All");
 
-	waitForUser("Determine the offset between the TL and FL images by making a note of the number of pixels the ROI should be shifted to the right (+x), left (-x), down (+y) or up (-y). ");
-
-	title = "Please enter the offsets in x and/or y. ";
-	Dialog.create("Offset entry");
-	Dialog.addNumber("x:", offset_TL_Fluo_x);
-	Dialog.addNumber("y:", offset_TL_Fluo_y);
-	Dialog.show();
-	offset_TL_Fluo_x = Dialog.getNumber();
-	offset_TL_Fluo_y = Dialog.getNumber();
-	offset_TL_Fluo[0] = offset_TL_Fluo_x; 
-	offset_TL_Fluo[1] = offset_TL_Fluo_y;
+	ROI_to_move = Math.ceil(roiManager("count")/2); 
+	roiManager("Select", ROI_to_move);
+	getSelectionBounds(x, y, w, h);
+	original_position_x = x; 
+	original_position_y = y;
+	waitForUser("Move the selected ROI to the correct position then click 'OK'.");
+	
+	roiManager("Update");
+	getSelectionBounds(x, y, w, h);
+	adjusted_position_x = x; 
+	adjusted_position_y = y;
+	
+	roiManager("Select", ROI_to_move);
+	setSelectionLocation(original_position_x, original_position_y);
+	
+	ROI_movement_x = adjusted_position_x - original_position_x; 
+	ROI_movement_y = adjusted_position_y - original_position_y; 
+	//print("Movement in x " + ROI_movement_x + " and y " + ROI_movement_y); 
+	
+	//move all ROIs to the correct position
+	number_of_ROI = roiManager("count");
+	if (number_of_ROI==0)
+	  exit("The ROI Manager is empty");
+	for (i=0; i<number_of_ROI; i++) {
+	  roiManager('select', i);
+	  getSelectionBounds(x, y, w, h);
+	  setSelectionLocation(x+ROI_movement_x, y+ROI_movement_y);
+	  roiManager('update');
+	}
+	roiManager("deselect");
+	roiManager("save", file_path + File.separator + file_base_title + "_bacteriaROIs.zip");
+	
+	offset_TL_Fluo[0] = ROI_movement_x; 
+	offset_TL_Fluo[1] = ROI_movement_y;
 	return offset_TL_Fluo;
 }
 
@@ -348,6 +437,8 @@ function duration_conversion(duration){
 function clean_up(){
 	close("*");
 	run("Clear Results");
+	selectWindow("Results"); 
+	run("Close");
 }
 
 

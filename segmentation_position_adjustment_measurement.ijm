@@ -54,8 +54,11 @@ rectangle_y = (TL_height - rectangle_height)/2;
 //print("Rectangle x " + rectangle_x); 
 
 selectWindow(TL_original_title); 
+waitForUser; 
 makeRectangle(rectangle_x, rectangle_y, rectangle_width , rectangle_height);
+waitForUser; 
 run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
+waitForUser; 
 run("Duplicate...", " ");
 TL_crop_title = getTitle();
 
