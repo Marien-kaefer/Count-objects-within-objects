@@ -417,7 +417,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Green Fire Blue");
 			//rename(old_heatmap_spot_peak_location);
 			old_heatmap_spot_peak_location = file_base_title + "_Ch_" + (i+1) + "_spot_peak_location_HeatMap_";
-			heatmap_creation_loop(ROI_initial_count, spots_file_title, old_heatmap_spot_peak_location, bacteria_mask_file_title, bacteria_size_minimum, file_path);
+			new_heatmap = heatmap_creation_loop(ROI_initial_count, spots_file_title, old_heatmap_spot_peak_location, bacteria_mask_file_title, bacteria_size_minimum, file_path);
 			run("Select None");
 		}
 		if (spot_size_heatmap_choice == true){
@@ -436,7 +436,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Green Fire Blue");
 			//rename(old_heatmap_spot_size);
 			old_heatmap_spot_size = file_base_title + "_Ch_" + (i+1) + "_spot_size_HeatMap_";
-			heatmap_creation_loop(ROI_initial_count, maxima_in_tolerance_file_title, old_heatmap_spot_size, bacteria_mask_file_title, bacteria_size_minimum, file_path);
+			new_heatmap = heatmap_creation_loop(ROI_initial_count, maxima_in_tolerance_file_title, old_heatmap_spot_size, bacteria_mask_file_title, bacteria_size_minimum, file_path);
 			roiManager("deselect");
 		}
 		
@@ -449,7 +449,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Green Fire Blue");
 			//rename(old_heatmap_intensity_sum);
 			old_heatmap_intensity_sum = file_base_title + "_Ch_" + (i+1) + "_intensity_sum_location_HeatMap_";
-			heatmap_creation_loop(ROI_initial_count, FL_title, old_heatmap_intensity_sum, bacteria_mask_file_title, bacteria_size_minimum, file_path);
+			new_heatmap = heatmap_creation_loop(ROI_initial_count, FL_title, old_heatmap_intensity_sum, bacteria_mask_file_title, bacteria_size_minimum, file_path);
 			roiManager("deselect");
 			//rescale heatmap to between 0 and 1
 			getMinAndMax(min, max);
@@ -458,6 +458,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Subtract...", "value=" + min);
 			run("Divide...", "value=" + (max - min));
 			resetMinAndMax;
+			saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
 		}		
 	}
 }
@@ -548,6 +549,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 		}
 		resetMinAndMax();
 		saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
+		return new_heatmap; 
 	}
 
 
