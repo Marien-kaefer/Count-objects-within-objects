@@ -431,7 +431,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Subtract...", "value=254");
 			setMinAndMax(0, 1);
 			rename(maxima_in_tolerance_file_title);		
-			old_heatmap_spot_size = file_base_title + "_Ch_" + (i+1) + "_spot_size_HeatMap_0";
+			old_heatmap_spot_size = file_base_title + "_Ch_" + (i+1) + "_maxima_within_tolerance_HeatMap_0";
 			newImage(old_heatmap_spot_size, "32-bit black", heatmap_width, heatmap_height, 1);
 			run("Green Fire Blue");
 			//rename(old_heatmap_spot_size);
