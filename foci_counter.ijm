@@ -4,6 +4,7 @@ cell_segmentation_smoothing = 6;
 foci_maxima_segmentation_smoothing = 3;
 background_subtration_rolling_ball_radius = 50;
 prominence = 50;
+line_width = 2; 
 
 // ---- Automated script start
 
@@ -17,6 +18,10 @@ setAutoThreshold("Huang dark"); // classifying pixels into two categories: backg
 run("Convert to Mask");
 //run("Watershed");
 mask_title = getTitle();
+setTool("freeline");
+run("Line Width...", "line="+line_width);
+waitForUser("Manually separate touching objects by drawing a freehand line and then pressing [d] to overlay the line. ");
+run("Convert to Mask");
 
 roiManager("Reset");
 run("Analyze Particles...", "size=" + min_cell_size + "-Infinity clear add"); // assign a unique identifier to each object and create outline
@@ -42,5 +47,6 @@ for(i=0; i<roiManager("count"); i++) {
 // -- foci segmentation end
 
 //notification that the script has finished
-print("All done!")
+print(title + " done!")
 beep();
+run("Line Width...", "line="+line_width);
