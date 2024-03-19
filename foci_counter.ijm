@@ -32,8 +32,8 @@ getDimensions(width, height, channels, slices, frames);
 
 //scaled parameters/
 scaling_factor = pixelWidth / 0.207567;
-scaled_image_width = scaling_factor * width; 
-scaled_image_height = scaling_factor * height; 
+scaled_image_width = Math.ceil(scaling_factor * width); 
+scaled_image_height = Math.ceil(scaling_factor * height); 
 run("Size...", "width=" + scaled_image_width + " height=" + scaled_image_height + " depth=" + channels + " constrain average interpolation=Bilinear");
 
 // -- cell segmentation start --
