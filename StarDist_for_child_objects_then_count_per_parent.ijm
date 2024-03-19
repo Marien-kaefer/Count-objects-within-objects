@@ -23,7 +23,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #@ Double(label="StarDist overlap threshold: ", value = 0.6) overlap_threshold
 #@ File (label = "Input directory", style = "directory") input
 #@ File (label = "Output directory", style = "directory") output
-#@ String (label = "File suffix", value = ".tif", persist=false) suffix
+#@ String (label = "File suffix of SUM projection file", value = ".tif", persist=false) suffix
 
 
 run("Fresh Start");
@@ -48,7 +48,7 @@ function processFolder(input) {
 			
 			convert_instance_mask_to_ROIs(file_name_without_extension, input, output);
 			label_image = segment_bacteria_with_StarDist(file_name_without_extension, output, probability_threshold, overlap_threshold);
-			number_of_bacteria = count_instance_mask_objects_in_ROI(label_image); 
+			number_of_bacteria = count_instance_mask_objects_in_ROI(output, file_name_without_extension, label_image); 
 			assemble_and_save_results(number_of_bacteria, output); 
 			 
 	}
@@ -77,7 +77,7 @@ function segment_bacteria_with_StarDist(file_name_without_extension, output, pro
 	return label_image; 
 }
 
-function count_instance_mask_objects_in_ROI(label_image){
+function count_instance_mask_objects_in_ROI(output, file_name_without_extension, label_image){
 	nBins = 256; 
 	number_of_bacteria = newArray(roiManager("count")); 
 	
@@ -87,6 +87,8 @@ function count_instance_mask_objects_in_ROI(label_image){
 		counts = 0; 
 		selectWindow(label_image); 
 		roiManager("Select", i);
+		roiManager("Rename", i);
+		roiManager("Save", output + File.separator + file_name_without_extension + "_cells.zip");
 		getHistogram(values, counts, nBins); // get histogram of "gray values" of instance mask. Each bin with >0 frequency is one cell plus one for background
 		IDs = counts; 
 		IDs_no_zero = Array.deleteValue(IDs, 0); // remove all bins that have 0 frequency
