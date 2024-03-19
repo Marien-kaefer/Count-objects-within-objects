@@ -19,17 +19,8 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 //get input parameters
 #@ String(value="Please select the file you wish to process and set the relevant parameters.", visibility="MESSAGE") message
-//#@ File (label = "Please select the sum projection of the file to be processed.:", style = "open") inputFile
-//#@ Boolean(label="Microcompartment Counting") analysis_choice_microcomp_count
-//#@ Boolean(label="Heat Map") analysis_choice_heatmap
-//#@ String(label = "Path to TL classifier file: ", description = "Z:/private/Marie/Image_Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/Labkit/bacteria_TL_segmentation_2560.classifier") classifier_file
-//#@ Integer(label="Ch1 Prominence: " , value = 1000) Ch1_prominence
-//#@ Integer(label="Ch2_prominence: " , value = 1000) Ch2_prominence
 #@ Double(label="StarDist probability/score threshold: ", value = 0.35) probability_threshold
 #@ Double(label="StarDist overlap threshold: ", value = 0.6) overlap_threshold
-//#@ Double(label="Bacteria circularity minimum: ", value = 0.0) bacteria_circularity_minimum
-//#@ Double(label="Bacteria circularity maximum: ", value = 0.9) bacteria_circularity_maximum
-//#@ Double(label="Intensity histogram kurtosis cutoff value: ", value = 3.0) kurtosis_cutoff
 #@ File (label = "Input directory", style = "directory") input
 #@ File (label = "Output directory", style = "directory") output
 #@ String (label = "File suffix", value = ".tif", persist=false) suffix
@@ -43,7 +34,7 @@ function processFolder(input) {
 	list = getFileList(input);
 	list = Array.sort(list);
 	for (i = 0; i < list.length; i++) {
-		if(File.isDirectory(input + File.separator + list[i]))
+		if(File.isDirectory(input + File.separator + list[i])) //also process files in directories within the input directory
 			processFolder(input + File.separator + list[i]);
 		if(endsWith(list[i], suffix)){
 			run("Fresh Start"); //clean up, closing open images, reset ROI manager, clears results window
@@ -61,25 +52,25 @@ function processFolder(input) {
 			assemble_and_save_results(number_of_bacteria, output); 
 			 
 	}
-	run("Fresh Start");
+	run("Fresh Start"); //clean up, closing open images, reset ROI manager, clears results window
 }
 
 waitForUser("Done!"); 
 
 function convert_instance_mask_to_ROIs(file_name_without_extension, input, output){
-	cells_label_file_name = file_name_without_extension + "_cp_masks.png"; 
+	cells_label_file_name = file_name_without_extension + "_cp_masks.png"; //open Cellpose cell instance mask
 	open(input + File.separator + cells_label_file_name);
 	run("glasbey_on_dark");
-	run("LabelMap to ROI Manager (2D)");
-	roiManager("Save", output + File.separator + file_name_without_extension + "_cells.zip");
+	run("LabelMap to ROI Manager (2D)"); // generate ROIs from instance mask
+	roiManager("Save", output + File.separator + file_name_without_extension + "_cells.zip"); //save ROI set
 }
 
 function segment_bacteria_with_StarDist(file_name_without_extension, output, probability_threshold, overlap_threshold){
 	selectWindow(file_name_without_extension); 
-	run("Duplicate...", "duplicate channels=3");
+	run("Duplicate...", "duplicate channels=3"); // extract channel 3, assumed to be the bacteria channel
 	bacteria_image = getTitle(); 
 	
-	run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'" + bacteria_image + "', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'100.0', 'probThresh':'" + probability_threshold + "', 'nmsThresh':'" + overlap_threshold + "', 'outputType':'Label Image', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'true', 'showCsbdeepProgress':'true', 'showProbAndDist':'false'], process=[false]");
+	run("Command From Macro", "command=[de.csbdresden.stardist.StarDist2D], args=['input':'" + bacteria_image + "', 'modelChoice':'Versatile (fluorescent nuclei)', 'normalizeInput':'true', 'percentileBottom':'1.0', 'percentileTop':'100.0', 'probThresh':'" + probability_threshold + "', 'nmsThresh':'" + overlap_threshold + "', 'outputType':'Label Image', 'nTiles':'1', 'excludeBoundary':'2', 'roiPosition':'Automatic', 'verbose':'true', 'showCsbdeepProgress':'true', 'showProbAndDist':'false'], process=[false]"); //identify bacteria using StarDist plugin
 	selectImage("Label Image");
 	saveAs("Tiff", output + File.separator + file_name_without_extension + "_bact_labelmask.tif");
 	label_image = getTitle();
@@ -88,7 +79,7 @@ function segment_bacteria_with_StarDist(file_name_without_extension, output, pro
 
 function count_instance_mask_objects_in_ROI(label_image){
 	nBins = 256; 
-	number_of_bacteria = newArray(roiManager("count"));
+	number_of_bacteria = newArray(roiManager("count")); 
 	
 	for (i = 0; i < roiManager("count") ; i++) {
 		//print("i: " + i);
@@ -96,12 +87,12 @@ function count_instance_mask_objects_in_ROI(label_image){
 		counts = 0; 
 		selectWindow(label_image); 
 		roiManager("Select", i);
-		getHistogram(values, counts, nBins); 
+		getHistogram(values, counts, nBins); // get histogram of "gray values" of instance mask. Each bin with >0 frequency is one cell plus one for background
 		IDs = counts; 
-		IDs_no_zero = Array.deleteValue(IDs, 0); 
+		IDs_no_zero = Array.deleteValue(IDs, 0); // remove all bins that have 0 frequency
 		//Array.show("title", IDs, IDs_no_zero);
 		
-		number_of_bacteria[i] = IDs_no_zero.length - 1; 
+		number_of_bacteria[i] = IDs_no_zero.length - 1; // measure length of array and subtract one (background) to get number of bacteria within the cell
 		//Array.print(number_of_bacteria); 
 	}
 	//Array.print(number_of_bacteria); 
