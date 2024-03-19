@@ -39,6 +39,7 @@ run("Size...", "width=" + scaled_image_width + " height=" + scaled_image_height 
 // -- cell segmentation start --
 title = getTitle();
 selectWindow(title);
+setSlice(1); 
 run("Duplicate...", " ");
 run("Median...", "radius="  + cell_segmentation_smoothing); // pre-processing - smoothing
 setAutoThreshold("Huang dark"); // classifying pixels into two categories: background and object (cell) pixels
