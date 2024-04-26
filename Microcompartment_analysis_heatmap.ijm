@@ -17,11 +17,14 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 */
 
 //get input parameters
-#@ String(value="Please select the transmitted light file of the file set you wish to process.", visibility="MESSAGE") message
-#@ File (label = "Transmitted light file:", style = "open") inputFile
+#@ String(value="Please specify the files and parameters to be applied for the processing.", visibility="MESSAGE") message
+#@ File (label = "File for segmentation:", style = "open") segmentation_inputFile
+#@ String(label = "Is the file for segmentation fluorescence light?", choices={"Yes","No"}, style="radioButtonHorizontal") segmentation_file_choice
+#@ Integer(label="If so, which channel should be segmented?" , value = 1) fluorescence_channel_number_to_segment
+#@ File (label = "Fluorescence file:", style = "open") fluorescence_inputFile
 #@ Boolean(label="Microcompartment Counting") analysis_choice_microcomp_count
 #@ Boolean(label="Heat Map") analysis_choice_heatmap
-#@ String(label = "Path to TL classifier file: ", description = "Z:/private/Marie/Image_Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/Labkit/bacteria_TL_segmentation_2560.classifier") classifier_file
+#@ File(label = "Classifier file: ", style = "file") classifier_file
 #@ Integer(label="Ch1 Prominence: " , value = 1000) Ch1_prominence
 #@ Integer(label="Ch2_prominence: " , value = 1000) Ch2_prominence
 #@ Double(label="Bacteria size minimum: ", value = 0.4) bacteria_size_minimum
@@ -30,42 +33,55 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #@ Double(label="Bacteria circularity maximum: ", value = 0.9) bacteria_circularity_maximum
 #@ Double(label="Intensity histogram kurtosis cutoff value: ", value = 3.0) kurtosis_cutoff
 
+
 start = getTime(); 
 print("The analysis is running");
 
 pre_clean_up();
 //variable definitions and calculations
-file_path = File.getDirectory(inputFile);
-TL_title = File.getName(inputFile);
-TL_title_no_ext = file_name_remove_extension(TL_title); 
-file_base_title = substring(TL_title_no_ext, 0, (lengthOf(TL_title_no_ext)-2));
-FL_title_no_ext = file_base_title + "-1"; 
-FL_title = FL_title_no_ext + ".czi";
+file_path = File.getDirectory(segmentation_inputFile);
+segmentation_title = File.getName(segmentation_inputFile);
+
+fluorescence_title = File.getName(fluorescence_inputFile); 
+segmentation_title_no_ext = file_name_remove_extension(segmentation_title); 
+//print("Segmentation title: " + segmentation_title_no_ext); 
+fluorescence_title_no_ext = file_name_remove_extension(fluorescence_title); 
+//print("Fluorescence title: " + fluorescence_title_no_ext); 
+file_base_title = substring(segmentation_title_no_ext, 0, (lengthOf(segmentation_title_no_ext)-2));
 ROI_set_title = file_base_title + "_bacteriaROIs.zip"; 
 ROI_set_combined_title = file_base_title + "_bacteriaROIs-combined.roi";
 
-TL_scaled_title = scaling_TL_image(file_path, TL_title, FL_title);
-TL_scaled_mask = segment_TL_image(TL_scaled_title, classifier_file); 
-ROI_set_title = determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext, ROI_set_title, ROI_set_combined_title);
 
-setBatchMode("hide");
-if (analysis_choice_microcomp_count == true){
-	print("Counting spots.");
-	spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence); 
+if (segmentation_file_choice == "No") {
+
+	TL_scaled_title = scaling_TL_image(file_path, segmentation_title, fluorescence_title);
+	TL_scaled_mask = segment_TL_image(TL_scaled_title, classifier_file); 
+	ROI_set_title = determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, segmentation_title_no_ext, ROI_set_title, ROI_set_combined_title);
+}
+else if (segmentation_file_choice == "Yes") {
+	ROI_set_title = segment_FL_image(file_path, fluorescence_title, fluorescence_channel_number_to_segment, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, ROI_set_title, ROI_set_combined_title);
 }
 
-if (analysis_choice_heatmap == true){
-	print("Creating spot heat map.");
-	spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff);
+if (ROI_set_title != "NaN"){
+	//setBatchMode("hide");
+	if (analysis_choice_microcomp_count == true){
+		print("Counting spots.");
+		spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence); 
+	}
+	
+	if (analysis_choice_heatmap == true){
+		print("Creating spot heat map.");
+		spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff);
+	}
+	//setBatchMode("show");
 }
-setBatchMode("show");
 
 //let user know the process has finished and how long it took
 stop = getTime(); 
 duration = stop - start;
 duration_String = duration_conversion(duration);
 print("The analysis took " + duration_conversion(duration));
-print(TimeStamp() + ": Processing of [" + TL_title + "] complete.");
+print(TimeStamp() + ": Processing of [" + segmentation_title + "] complete.");
 beep();
 
 
@@ -77,18 +93,18 @@ function pre_clean_up(){
 	run("Clear Results");
 }
 
-function file_name_remove_extension(TL_title){
-	dotIndex = lastIndexOf(TL_title, "." ); 
-	file_name_without_extension = substring(TL_title, 0, dotIndex );
+function file_name_remove_extension(file_title){
+	dotIndex = lastIndexOf(file_title, "." ); 
+	file_name_without_extension = substring(file_title, 0, dotIndex );
 	//print( "Name without extension: " + file_name_without_extension );
 	return file_name_without_extension;
 }
 
-function scaling_TL_image(file_path, TL_title, FL_title){
-	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + TL_title + "]");
-	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + FL_title + "]");
+function scaling_TL_image(file_path, segmentation_title, fluorescence_title){
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + segmentation_title + "]");
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + fluorescence_title + "]");
 	
-	selectWindow(TL_title); 
+	selectWindow(segmentation_title); 
 	getDimensions(width, height, channels, slices, frames);
 	TL_width = width; 
 	TL_height = height; 
@@ -96,7 +112,7 @@ function scaling_TL_image(file_path, TL_title, FL_title){
 	TL_pixelWidth = pixelWidth;
 	TL_pixelHeight = pixelHeight; 
 	
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	getDimensions(width, height, channels, slices, frames);
 	SIM_width = width; 
 	SIM_height = height; 
@@ -110,7 +126,7 @@ function scaling_TL_image(file_path, TL_title, FL_title){
 	//print("Optovar factor: " + optovar_factor);
 	
 	if (optovar_factor == 1) {
-		selectWindow(TL_title); 
+		selectWindow(segmentation_title); 
 		run("Duplicate...", " ");
 		rename("temp_title"); 
 } 
@@ -123,7 +139,7 @@ function scaling_TL_image(file_path, TL_title, FL_title){
 		//print("Rectangle x " + rectangle_x); 
 		rectangle_y = (TL_height - rectangle_height)/2;
 		//print("Rectangle x " + rectangle_x);  
-		selectWindow(TL_title); 
+		selectWindow(segmentation_title); 
 		makeRectangle(rectangle_x, rectangle_y, rectangle_width , rectangle_height);
 		run("Duplicate...", " ");
 		rename("temp_title"); 
@@ -138,41 +154,71 @@ function scaling_TL_image(file_path, TL_title, FL_title){
 		//print("Rectangle x " + rectangle_x); 
 		rectangle_y = (SIM_height - rectangle_height)/2;
 		//print("Rectangle x " + rectangle_x);  
-		selectWindow(FL_title); 
+		selectWindow(fluorescence_title); 
 		makeRectangle(rectangle_x, rectangle_y, rectangle_width , rectangle_height);run("Duplicate...", " ");
 		rename("temp_title"); 
 	}
 	selectWindow("temp_title"); 
 	run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
-	saveAs("Tiff", file_path + File.separator + TL_title_no_ext + "_scaled.tif");
+	saveAs("Tiff", file_path + File.separator + segmentation_title_no_ext + "_scaled.tif");
 	TL_scaled_title = getTitle; 
 	return TL_scaled_title; 
 }
 
-
 function segment_TL_image(TL_scaled_title, classifier_file){
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	getDimensions(width, height, channels, slices, frames);
 	SIM_width = width; 
 	SIM_height = height; 
 	
-	selectWindow(TL_title); 
-	//classifier_file = "Y:/private/Marie/Image_Analysis/2023-06-14-LIU-Mengru-count-spots-in-bacteria/input/Labkit/bacteria_TL_segmentation.classifier";
+	selectWindow(segmentation_title); 
 	run("Segment Image With Labkit", "segmenter_file=" + classifier_file + " use_gpu=false");
-	saveAs("Tiff", file_path + File.separator + TL_title_no_ext + "_scaled_mask.tif");
+	saveAs("Tiff", file_path + File.separator + segmentation_title_no_ext + "_scaled_mask.tif");
 	run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
 	TL_scaled_mask = getTitle();
 	return TL_scaled_mask; 
 	}
 
-function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, TL_title_no_ext, ROI_set_title, ROI_set_combined_title){
+function segment_FL_image(file_path, fluorescence_title, fluorescence_channel_number_to_segment, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, ROI_set_title, ROI_set_combined_title){
+	
+	run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + fluorescence_title + "]");
+	getDimensions(width, height, channels, slices, frames);
+	if ((fluorescence_channel_number_to_segment<0 || fluorescence_channel_number_to_segment>channels)){ 
+		waitForUser("Something went wrong.", "The fluorescence image does not have the specified channel. Please start the analysis again.");
+		ROI_set_title = "NaN"; 
+	}
+	else {
+	 
+	 	run("Duplicate...", "duplicate channels=" + fluorescence_channel_number_to_segment);
+		run("Median...", "radius=2");
+		setAutoThreshold("Default dark");
+		//run("Threshold...");
+		run("Convert to Mask");
+		run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
+		fluorescence_segmentation_mask_title = segmentation_title_no_ext + "_fluorescence_mask_Ch" +  fluorescence_channel_number_to_segment; 
+		roiManager("show none");
+		saveAs("Tiff", file_path + File.separator + fluorescence_segmentation_mask_title + ".tif");
+		fluorescence_segmentation_mask_title = getTitle(); 
+		
+		roiManager("deselect");
+		roiManager("save", file_path + File.separator + ROI_set_title);
+		roiManager("combine");
+		roiManager("add");
+		ROI_count = roiManager("count") - 1;
+		roiManager("select", ROI_count);
+		roiManager("save", file_path + File.separator + ROI_set_combined_title);	
+	}
+	return ROI_set_title;
+}
+
+function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, segmentation_title_no_ext, ROI_set_title, ROI_set_combined_title){
 	selectWindow(TL_scaled_mask); 
 	setAutoThreshold("Default dark");
 	//run("Threshold...");
 	run("Convert to Mask"); 
 	run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
 
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	run("Enhance Contrast", "saturated=0.35");
 	roiManager("Show All");
 
@@ -215,7 +261,7 @@ function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, ba
 	
 	selectWindow(TL_scaled_title); 
 	run("Translate...", "x=" + ROI_movement_x +" y=" + ROI_movement_y +" interpolation=None");
-	saveAs("Tiff", file_path + File.separator + TL_title_no_ext + "_scaled.tif");
+	saveAs("Tiff", file_path + File.separator + segmentation_title_no_ext + "_scaled.tif");
 	close(); 
 	selectWindow(TL_scaled_mask); 
 	close(); 
@@ -226,8 +272,8 @@ function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, ba
 
 
 // ##################### SPOT COUNTING ##################### 
-function spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence){
-	selectWindow(FL_title); 
+function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence){
+	selectWindow(fluorescence_title); 
 	run("Set Measurements...", "area mean shape kurtosis redirect=None decimal=3");
 	roiManager("Open", file_path + File.separator + ROI_set_title);
 	roiManager("Deselect");
@@ -265,12 +311,12 @@ function spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2
 			
 	Ch1_spot_count = newArray(number_of_bacteria);
 	Ch2_spot_count = newArray(number_of_bacteria);
-	//loopStop = 5; 
+	//loopStop = 10; 
 	loopStop = roiManager("count");
 	
 	// loop to count the number of spots per bacterium 
 	
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	setSlice(1); 
 	//run("Brightness/Contrast...");
 	//run("Enhance Contrast", "saturated=0.01");
@@ -283,7 +329,7 @@ function spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2
 		run("Add Selection...");
 	}
 
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	roiManager("Show None");
 	run("Select None");
 	run("Duplicate...", "ignore"); 
@@ -293,7 +339,7 @@ function spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2
 	run("Close");
 	
 	run("Remove Overlay");
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	setSlice(2);  
 	//run("Brightness/Contrast...");
 	run("Enhance Contrast", "saturated=0.01");
@@ -313,11 +359,13 @@ function spot_counting(FL_title, file_path, file_base_title, Ch1_prominence, Ch2
 	run("Clear Results");
 		
 	//clean up
-	selectWindow(TL_title); 
-	close(); 
+	if (isOpen(segmentation_title)){
+		selectWindow(segmentation_title);
+		run("Close");
+	}
 	roiManager("reset");
-
 	assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean, Ch1_kurtosis, Ch1_class, Ch2_spot_count, Ch2_mean, Ch2_kurtosis, Ch2_class); 
+
 }
 
 function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean, Ch1_kurtosis, Ch1_class, Ch2_spot_count, Ch2_mean, Ch2_kurtosis, Ch2_class){
@@ -340,9 +388,9 @@ function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean,
 
 // ##################### HEATMAP GENERATION #####################  
 
-function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff){
+function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff){
 	//generate mask of bacteria bodies
-	selectWindow(FL_title); 
+	selectWindow(fluorescence_title); 
 	getDimensions(width, height, channels, slices, frames);
 	FL_channels = channels; 
 	FL_width = width; 
@@ -390,7 +438,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			roiManager("reset");			
 			print("Channel" + (i+1) + " - Spot location heatmap generation");
 			points_ROI_file_title = "Channel" + (i+1) + "_points.roi";
-			selectWindow(FL_title);
+			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
 			run("Select None");			
 			run("Hide Overlay");		
@@ -404,7 +452,7 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			run("Draw", "slice");
 			run("Subtract...", "value=254");
 			setMinAndMax(0, 1);
-			selectWindow(FL_title);
+			selectWindow(fluorescence_title);
 			roiManager("reset");
 			run("Select None");
 			selectWindow(spots_file_title);
@@ -423,14 +471,16 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 		if (spot_size_heatmap_choice == true){
 			print("Channel" + (i+1) + " - Spot size heatmap generation");
 			maxima_in_tolerance_file_title = "Channel" + (i+1) + "_maxima_in_tolerance";
-			selectWindow(FL_title);
+			selectWindow(fluorescence_title);
 			roiManager("deselect");
 			run("Select None");
-			Stack.setChannel(i+1);			
-			run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Maxima Within Tolerance]");
+			Stack.setChannel(i+1);		
+			run("Duplicate...", "duplicate channels="+(i+1));
+			run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Maxima Within Tolerance]"); 
 			run("Subtract...", "value=254");
 			setMinAndMax(0, 1);
 			rename(maxima_in_tolerance_file_title);		
+			waitForUser("Were maxima found? ");
 			old_heatmap_spot_size = file_base_title + "_Ch_" + (i+1) + "_maxima_within_tolerance_HeatMap_0";
 			newImage(old_heatmap_spot_size, "32-bit black", heatmap_width, heatmap_height, 1);
 			run("Green Fire Blue");
@@ -442,14 +492,14 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 		
 		if (intensity_sum_heatmap_choice == true){
 			print("Channel" + (i+1) + " - Intensity heatmap generation");
-			selectWindow(FL_title);
+			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
 			old_heatmap_intensity_sum = file_base_title + "_Ch_" + (i+1) + "_intensity_sum_location_HeatMap_0";
 			newImage(old_heatmap_intensity_sum, "32-bit black", heatmap_width, heatmap_height, 1);
 			run("Green Fire Blue");
 			//rename(old_heatmap_intensity_sum);
 			old_heatmap_intensity_sum = file_base_title + "_Ch_" + (i+1) + "_intensity_sum_location_HeatMap_";
-			new_heatmap = heatmap_creation_loop(ROI_initial_count, FL_title, old_heatmap_intensity_sum, bacteria_mask_file_title, bacteria_size_minimum, file_path);
+			new_heatmap = heatmap_creation_loop(ROI_initial_count, fluorescence_title, old_heatmap_intensity_sum, bacteria_mask_file_title, bacteria_size_minimum, file_path);
 			roiManager("deselect");
 			//rescale heatmap to between 0 and 1
 			getMinAndMax(min, max);
@@ -461,21 +511,26 @@ function spot_heatmap(FL_title, file_path, ROI_set_combined_title, file_base_tit
 			saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
 		}		
 	}
-}
+
 
 function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_file_name, bacteria_mask_file_title, bacteria_size_minimum, file_path){
-		counter = 0; 
+		counter = 0;
 		//loop over all ROIs
 		//for (k = 0; k < 3; k++) {
 		for (k = 0; k < ROI_initial_count; k++) {
+			print("Roi index: " + k); 
+			wait("Just inside ROI loop in heatmap creation function"); 
+			open_images = getList("image.titles");
+			Array.print(open_images); 
+			
 			
 			ROI_of_choice = k;
 			print("Processing object " + (k+1) +"/" + ROI_initial_count + ", Channel " + (i+1)); 
 			//print("input data image: " + input_data_image); 
-			//print("old heat map: " + old_heatmap_file_name); 
+			print("old heat map: " + old_heatmap_file_name); 
 		
 			//duplicate signal of input channel 
-			selectWindow(FL_title);
+			selectWindow(fluorescence_title);
 			roiManager("select", ROI_of_choice);
 			object_angle = getValue("Angle");
 			object_kurtosis = getValue("Kurt");
@@ -525,10 +580,10 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 			}
 			
 			old_heatmap = old_heatmap_file_name + k;
-			//print("Old heat map: " + old_heatmap); 
+			print("Old heat map: " + old_heatmap); 
 			imageCalculator("Add 32-bit", old_heatmap, resized_rotated_spots_title);
 			new_heatmap = old_heatmap_file_name + (k+1);
-			//print("New heat map: " + new_heatmap); 
+			print("New heat map: " + new_heatmap); 
 			rename(new_heatmap); 
 			resetMinAndMax;
 			
@@ -551,8 +606,6 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 		saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
 		return new_heatmap; 
 	}
-
-
 
 // ##################### GENERIC ##################### 
 
