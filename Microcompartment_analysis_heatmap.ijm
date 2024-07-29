@@ -390,6 +390,8 @@ function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean,
 
 function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff){
 	//generate mask of bacteria bodies
+	roiManager("reset");
+	run("Select None");
 	selectWindow(fluorescence_title); 
 	getDimensions(width, height, channels, slices, frames);
 	FL_channels = channels; 
@@ -397,6 +399,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	FL_height = height;
 	newImage("Untitled", "8-bit black", FL_width, FL_height, 1);
 	roiManager("Open", file_path + File.separator + ROI_set_combined_title);
+	//waitForUser("Has combined ROI set been opened?");
 	roiManager("select", 0);
 	run("Add...", "value=255");
 	bacteria_mask_file_title = file_base_title + "_objects";
@@ -430,11 +433,13 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	roiManager("open", file_path + File.separator + ROI_set_title);
 	ROI_initial_count = roiManager("count");
 	
+
+	
 	for (i = 0; i < channels; i++) {
 		channel_prominence_variable_name = "Ch" + (i+1) + "_prominence";
 		//print(channel_prominence_variable_name); 		
 		
-		if (spot_peak_location_heatmap_choice == true){
+		if (spot_peak_location_heatmap_choice == true){ 				
 			roiManager("reset");			
 			print("Channel" + (i+1) + " - Spot location heatmap generation");
 			points_ROI_file_title = "Channel" + (i+1) + "_points.roi";
@@ -515,9 +520,17 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 
 function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_file_name, bacteria_mask_file_title, bacteria_size_minimum, file_path){
 		counter = 0;
+		
+		//create an empty stack
+		aspect_ratio = 3.0;  
+		heatmap_height = 26; 
+		heatmap_width = Math.ceil(heatmap_height * aspect_ratio);
+		print("Creating new heatmap stack, idea from 24/07/2024)"); 
+		newImage("Heatmap Stack", "8-bit black", heatmap_width, heatmap_height, ROI_initial_count);
+		heatmap_stack_ID = getImageID();
 		//loop over all ROIs
-		//for (k = 0; k < 3; k++) {
-		for (k = 0; k < ROI_initial_count; k++) {
+		for (k = 0; k < 10; k++) {
+		//for (k = 0; k < ROI_initial_count; k++) {
 			print("Roi index: " + k); 
 			wait("Just inside ROI loop in heatmap creation function"); 
 			open_images = getList("image.titles");
@@ -572,6 +585,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 			//scale image to certain aspect ratio --> check with Mengru which aspect ratio is desired
 			run("Size...", "width=" + heatmap_width + " height=" + heatmap_height + " depth=1 average interpolation=Bicubic");
 			resized_rotated_spots_title = getTitle();
+			resized_rotated_spots_ID = getImageID();
 			
 			if (object_kurtosis < kurtosis_cutoff) {
 				run("Set...", "value=0");
@@ -579,6 +593,17 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 				print("Rejected bacteria due to kurtosis: " + counter);  
 			}
 			
+			selectImage(resized_rotated_spots_ID);
+			//waitForUser("What image type is the selected image?");
+			run("Select None");
+			run("Copy");
+			selectImage(heatmap_stack_ID); 
+			//waitForUser("Is the correct slice selected");
+			setSlice(k + 1);
+			run("Paste");
+			run("Enhance Contrast", "saturated=0.35");
+			
+			/*
 			old_heatmap = old_heatmap_file_name + k;
 			print("Old heat map: " + old_heatmap); 
 			imageCalculator("Add 32-bit", old_heatmap, resized_rotated_spots_title);
@@ -598,8 +623,10 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, old_heatmap_
 			close();
 			selectWindow(resized_rotated_spots_title); 
 			close(); 
+			*/
 			
 			roiManager("deselect");
+			run("Select None");
 			
 		}
 		resetMinAndMax();
