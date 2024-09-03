@@ -198,19 +198,32 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 		
 		else if (user_segmentation_choice == "Minimum (Ping)") {
 			//PING
-			run("Duplicate...", " ");
 			run("Enhance Contrast", "saturated=0.35");
+			run("Duplicate...", " ");
+			raw_duplicate_ID = getImageID();
+			raw_duplicate_title = getTitle(); 
+			run("Duplicate...", " ");
+			raw_Gauss_ID = getImageID();
+			raw_Gauss_title = getTitle();
+			run("Gaussian Blur...", "sigma=20");
+			imageCalculator("Subtract create 32-bit", raw_duplicate_title, raw_Gauss_title);
+			BG_subtracted_ID = getImageID();
+			selectImage(raw_duplicate_ID);
+			close(); 
+			selectImage(raw_Gauss_ID);
+			close(); 
+
+			selectImage(BG_subtracted_ID);
 			run("Median...", "radius=1");
 			run("Minimum...", "radius=1");
 			//run("Threshold...");
 			setAutoThreshold("Huang");
 			setOption("BlackBackground", true);
-			run("Convert to Mask");
-			TL_mask_ID = getImageID();
-			
+			run("Convert to Mask");			
+			TL_mask_ID = getImageID();			
 		}
+		
 		else if (user_segmentation_choice == "Variance (Kuo)") { 
-			input_ID = getImageID();
 			run("Enhance Contrast", "saturated=0.35");
 			run("Duplicate...", " ");
 			run("Subtract Background...", "rolling=20 light");
@@ -224,6 +237,7 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 			run("Dilate");
 			run("Dilate");
 		}
+		
 		run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
 		selectImage(TL_duplicate_ID);
 		roiManager("Show All without labels");	
@@ -244,11 +258,9 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 			run("Select None");
 			run("Hide Overlay");
 		}
-
-
+		
    } while (satifaction_score != "Yes");
 
-	
 	roiManager("reset");
 	run("Select None");
 	run("Hide Overlay");
@@ -258,6 +270,7 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 	TL_scaled_mask = getTitle();
 	
 	return TL_scaled_mask; 
+	
 	}
 
 function segment_FL_image(file_path, fluorescence_title, fluorescence_channel_number_to_segment, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, ROI_set_title, ROI_set_combined_title){
