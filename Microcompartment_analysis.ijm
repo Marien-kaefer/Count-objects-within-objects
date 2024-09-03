@@ -54,7 +54,8 @@ ROI_set_combined_title = file_base_title + "_bacteriaROIs-combined.roi";
 
 if (segmentation_file_choice == "No") {
 	TL_scaled_title = scaling_TL_image(file_path, segmentation_title, fluorescence_title);
-	TL_scaled_mask = segment_TL_image(TL_scaled_title, classifier_file); 
+	TL_scaled_mask = segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum); 
+	
 	ROI_set_title = determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, file_path, segmentation_title_no_ext, ROI_set_title, ROI_set_combined_title);
 }
 else if (segmentation_file_choice == "Yes") {
@@ -166,18 +167,98 @@ function scaling_TL_image(file_path, segmentation_title, fluorescence_title){
 	return TL_scaled_title; 
 }
 
-function segment_TL_image(TL_scaled_title, classifier_file){
+function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum){
 	selectWindow(fluorescence_title); 
 	getDimensions(width, height, channels, slices, frames);
 	SIM_width = width; 
 	SIM_height = height; 
 	
-	selectWindow(segmentation_title); 
-	run("Segment Image With Labkit", "segmenter_file=" + classifier_file + " use_gpu=false");
-	saveAs("Tiff", file_path + File.separator + segmentation_title_no_ext + "_scaled_mask.tif");
+	satifaction_score = "No";
+    do {
+    	selectWindow(segmentation_title); 
+		run("Duplicate...", " ");
+		TL_duplicate_ID = getImageID();
+		
+		segmentation_choice_array = newArray("Labkit (Mengru)", "Minimum (Ping)", "Variance (Kuo)"); 
+		Dialog.create("Choose segmentation method");
+		Dialog.addMessage("Please select a segmentation method.");	
+		Dialog.addChoice("Segmentation approach: ", segmentation_choice_array);
+		Dialog.show();
+	
+		user_segmentation_choice = Dialog.getChoice();
+
+		if (user_segmentation_choice == "Labkit (Mengru)") {
+			//Mengru
+			run("Segment Image With Labkit", "segmenter_file=" + classifier_file + " use_gpu=false");
+			setAutoThreshold("Default dark");
+			//run("Threshold...");
+			run("Convert to Mask"); 	
+			TL_mask_ID = getImageID();
+		}
+		
+		else if (user_segmentation_choice == "Minimum (Ping)") {
+			//PING
+			run("Duplicate...", " ");
+			run("Median...", "radius=2");
+			run("Minimum...", "radius=2");
+			//run("Threshold...");
+			setAutoThreshold("Default");
+			setOption("BlackBackground", true);
+			run("Convert to Mask");
+			TL_mask_ID = getImageID();
+			
+		}
+		else if (user_segmentation_choice == "Variance (Kuo)") { 
+			input_ID = getImageID();
+			run("Enhance Contrast", "saturated=0.35");
+			run("Duplicate...", " ");
+			run("Subtract Background...", "rolling=20 light");
+			run("Median...", "radius=2");
+			run("Variance...", "radius=2");
+			setAutoThreshold("Huang");
+			setOption("BlackBackground", true);
+			run("Convert to Mask");			
+			TL_mask_ID = getImageID();
+			run("Dilate");
+			run("Dilate");
+			run("Dilate");
+		}
+		run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
+		selectImage(TL_duplicate_ID);
+		roiManager("Show All without labels");	
+
+		satisfaction_score_array = newArray("Yes", "No"); 
+		Dialog.create("Segmentation Satisfaction");
+		Dialog.addMessage("Are you satisfied with the segmentation result? If ''No'' is selected, you will presented with the segmentation choice again.");
+		Dialog.addChoice("Satisfaction score: ", satisfaction_score_array);
+		Dialog.show();
+
+		satifaction_score = Dialog.getChoice();
+		if (satifaction_score == "No"){
+			selectImage(TL_mask_ID);
+			close();
+			selectImage(TL_duplicate_ID);
+			close();
+			roiManager("reset");
+			run("Select None");
+			run("Hide Overlay");
+		}
+
+
+   } while (satifaction_score != "Yes");
+
+	
+	roiManager("reset");
+	run("Select None");
+	run("Hide Overlay");
+	selectImage(TL_mask_ID);
 	run("Size...", "width=" + SIM_width + " height=" + SIM_height + " depth=1 constrain average interpolation=None");
+	saveAs("Tiff", file_path + File.separator + segmentation_title_no_ext + "_scaled_mask.tif");
 	TL_scaled_mask = getTitle();
+	
 	return TL_scaled_mask; 
+	
+	waitForUser("Cancel to exit.");
 	}
 
 function segment_FL_image(file_path, fluorescence_title, fluorescence_channel_number_to_segment, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, ROI_set_title, ROI_set_combined_title){
