@@ -199,10 +199,11 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 		else if (user_segmentation_choice == "Minimum (Ping)") {
 			//PING
 			run("Duplicate...", " ");
-			run("Median...", "radius=2");
-			run("Minimum...", "radius=2");
+			run("Enhance Contrast", "saturated=0.35");
+			run("Median...", "radius=1");
+			run("Minimum...", "radius=1");
 			//run("Threshold...");
-			setAutoThreshold("Default");
+			setAutoThreshold("Huang");
 			setOption("BlackBackground", true);
 			run("Convert to Mask");
 			TL_mask_ID = getImageID();
@@ -257,8 +258,6 @@ function segment_TL_image(TL_scaled_title, classifier_file, bacteria_size_minimu
 	TL_scaled_mask = getTitle();
 	
 	return TL_scaled_mask; 
-	
-	waitForUser("Cancel to exit.");
 	}
 
 function segment_FL_image(file_path, fluorescence_title, fluorescence_channel_number_to_segment, bacteria_size_minimum, bacteria_size_maximum, bacteria_circularity_minimum, bacteria_circularity_maximum, ROI_set_title, ROI_set_combined_title){
