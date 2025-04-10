@@ -562,7 +562,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			spots_file_ID = getImageID();
 			roiManager("reset");			
 			print("Channel" + (i+1) + " - Spot location heatmap generation");
-			points_ROI_file_title = "Ch" + (i+1) + "_points.roi";
+			points_ROI_file_title = file_base_title + "Ch" + (i+1) + "_points.roi";
 			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
 			run("Select None");			
@@ -724,13 +724,13 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 		}
 		selectImage(heatmap_stack_ID); 
 		resetMinAndMax; 
-		saveAs("TIFF", file_path + File.separator + "Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_stack.tif");
+		saveAs("TIFF", file_path + File.separator + file_base_title +  "_Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_stack.tif");
 		
 		selectImage(heatmap_stack_ID); 
 		run("Z Project...", "projection=[Sum Slices]");
 		run("mpl-viridis");
 		run("Enhance Contrast", "saturated=0.35");
-		saveAs("TIFF", file_path + File.separator + "Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_sum.tif");
+		saveAs("TIFF", file_path + File.separator + file_base_title +  "_Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_sum.tif");
 		close(); 
 		
 	}
