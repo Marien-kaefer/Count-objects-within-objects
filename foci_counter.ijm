@@ -87,3 +87,7 @@ setTool("line");
 //notification that the script has finished
 print(title + " done!")
 beep();
+
+
+
+TEST
