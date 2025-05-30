@@ -36,7 +36,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #@ Double(label="Intensity histogram kurtosis cutoff value: ", value = 3.0) kurtosis_cutoff
 
 start = getTime(); 
-print("The analysis is running");
+print(TimeStamp() + " The analysis is running");
 
 pre_clean_up();
 //variable definitions and calculations
@@ -448,8 +448,8 @@ function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_promi
 			
 	Ch1_spot_count = newArray(number_of_bacteria);
 	Ch2_spot_count = newArray(number_of_bacteria);
-	loopStop = 20; 
-	//loopStop = roiManager("count");
+	//loopStop = 20; 
+	loopStop = roiManager("count");
 	
 	// loop to count the number of spots per bacterium 
 	
@@ -574,7 +574,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	
 	for (i = 0; i < channels; i+=SR_channel_delta) {
 		channel_prominence_variable_name = "Ch" + k + "_prominence";
-		k += 1; 
+		
 		//print(channel_prominence_variable_name); 		
 		
 		spots_file_title = file_base_title + "_spots_locations";
@@ -586,7 +586,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			newImage(spots_file_title, "8-bit black", FL_width, FL_height, 1);
 			spots_file_ID = getImageID();
 			roiManager("reset");			
-			print("Channel" + (i+1) + " - Spot location heatmap generation");
+			print("Channel " + k + " - Spot location heatmap generation");
 			points_ROI_file_title = file_base_title + "_Ch" + k + "_points.roi";
 			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
@@ -616,13 +616,13 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			run("Select None");
 		}
 		if (spot_size_heatmap_choice == true){
-			print("Channel" + (i+1) + " - Spot size heatmap generation");
-			maxima_in_tolerance_file_title = "Channel" + (i+1) + "_maxima_in_tolerance";
+			print("Channel " + k + " - Spot size heatmap generation");
+			maxima_in_tolerance_file_title = "Channel " + k + "_maxima_in_tolerance";
 			selectWindow(fluorescence_title);
 			roiManager("deselect");
 			run("Select None");
 			Stack.setChannel(i+1);	
-			print("Duplicating channel: " + (i+1)); 
+			//print("Duplicating channel: " + (i+1)); 
 			run("Duplicate...", "duplicate channels="+(i+1));
 			run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Maxima Within Tolerance]"); 
 			run("Subtract...", "value=254");
@@ -635,7 +635,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 		}
 		
 		if (intensity_sum_heatmap_choice == true){
-			print("Channel" + (i+1) + " - Intensity heatmap generation");
+			print("Channel " + k + " - Intensity heatmap generation - spots only");
 			
 			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
@@ -653,7 +653,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			//saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
 		}		
 		if (intensity_sum_all_heatmap_choice == true){
-			print("Channel" + (i+1) + " - Intensity heatmap generation");
+			print("Channel " + k + " - Intensity heatmap generation all bacteria");
 			
 			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
@@ -670,6 +670,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			//resetMinAndMax;
 			//saveAs("TIFF", file_path + File.separator + new_heatmap + ".tif");
 		}	
+	k += 1; 
 	}
 }
 
@@ -683,14 +684,14 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 		newImage("Heatmap Stack", "16-bit black", heatmap_width, heatmap_height, ROI_initial_count);
 		heatmap_stack_ID = getImageID();
 		//loop over all ROIs
-		for (k = 0; k < 20; k++) {
-		//for (k = 0; k < ROI_initial_count; k++) {
-			//print("Roi index: " + k); 
+		//for (r = 0; r < 20; r++) {
+		for (r = 0; r < ROI_initial_count; r++) {
+			//print("Roi index: " + r); 
 			open_images = getList("image.titles");
 			//Array.print(open_images); 	
 			
-			ROI_of_choice = k;
-			//print("Processing object " + (k+1) +"/" + ROI_initial_count + ", Channel " + (i+1)); 
+			ROI_of_choice = r;
+			//print("Processing object " + (r+1) +"/" + ROI_initial_count + ", Channel " + (i+1)); 
 			//print("input data image: " + input_data_image); 
 			//print("old heat map: " + old_heatmap_file_name); 
 		
@@ -704,7 +705,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 
 			selectWindow(input_data_image);
 			roiManager("select", ROI_of_choice);	
-			run("Duplicate...", " duplicate channels=" + (i+1) + " title=Spots_ROI_CH" + (i+1) + "_object_" + k);		
+			run("Duplicate...", " duplicate channels=" + (i+1) + " title=Spots_ROI_CH" + k + "_object_" + r);		
 			run("Clear Outside");
 			//rotate duplicated bacterial spots image by fit ellipse angle
 			run("Rotate... ", "angle=" + object_angle + " grid=1 interpolation=Bicubic enlarge"); 
@@ -712,7 +713,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 			
 			selectWindow(bacteria_mask_file_title); 
 			roiManager("select", ROI_of_choice);
-			run("Duplicate...", "title=Mask_ROI_" + k);
+			run("Duplicate...", "title=Mask_ROI_" + r);
 			run("Clear Outside");
 			run("Rotate... ", "angle=" + object_angle + " grid=1 interpolation=Bicubic enlarge"); //rotate duplicated bacterium image by fit ellipse angle
 			rotated_single_object_mask = getTitle();
@@ -753,7 +754,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 			run("Select None");
 			run("Copy");
 			selectImage(heatmap_stack_ID); 
-			setSlice(k + 1);
+			setSlice(r + 1);
 			run("Paste");
 			run("Enhance Contrast", "saturated=0.35");
 			
@@ -770,12 +771,12 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 		}
 		selectImage(heatmap_stack_ID); 
 		resetMinAndMax; 
-		saveAs("TIFF", file_path + File.separator + file_base_title + "_Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_stack.tif");
+		saveAs("TIFF", file_path + File.separator + file_base_title + "_Ch" + k + "_" + heatmap_stack_title + "_Heatmap_stack.tif");
 		selectImage(heatmap_stack_ID); 
 		run("Z Project...", "projection=[Sum Slices]");
 		run("mpl-viridis");
 		run("Enhance Contrast", "saturated=0.35");
-		saveAs("TIFF", file_path + File.separator + file_base_title + "_Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_sum.tif");
+		saveAs("TIFF", file_path + File.separator + file_base_title + "_Ch" + k + "_" + heatmap_stack_title + "_Heatmap_sum.tif");
 		close(); 
 		print("Heatmap creation loop complete."); 
 	}
