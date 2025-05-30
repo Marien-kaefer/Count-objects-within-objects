@@ -552,7 +552,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	Dialog.addCheckbox("Spot sizes", false);
 	Dialog.addCheckbox("Intensity sum (spots only)", false);
 	Dialog.addCheckbox("Intensity sum (all bacteria)", false);
-	Dialog.addNumber("Heatmap aspect ratio", 1.0, 1, 10, " ");
+	Dialog.addNumber("Heatmap aspect ratio", 2.6, 1, 10, " ");
 	Dialog.show();
 	
 	spot_peak_location_heatmap_choice = Dialog.getCheckbox();
