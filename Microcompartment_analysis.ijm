@@ -52,6 +52,11 @@ file_base_title = substring(segmentation_title_no_ext, 0, (lengthOf(segmentation
 ROI_set_title = file_base_title + "_bacteriaROIs.zip"; 
 ROI_set_combined_title = file_base_title + "_bacteriaROIs-combined.roi";
 
+run("Bio-Formats Windowless Importer", "open=[" + file_path + File.separator + fluorescence_title + "]");
+getDimensions(width, height, channels, slices, frames);
+SR_channel_delta = channels / 2 ;  
+close(); 
+
 
 if (segmentation_file_choice == "No") {
 	TL_scaled_title = scaling_TL_image(file_path, segmentation_title, fluorescence_title);
@@ -67,12 +72,13 @@ if (ROI_set_title != "NaN"){
 	//setBatchMode("hide");
 	if (analysis_choice_microcomp_count == true){
 		print("Counting spots.");
-		spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence); 
+		spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence, SR_channel_delta); 
+		print("Counting spots finished."); 
 	}
 	
 	if (analysis_choice_heatmap == true){
 		print("Creating spot heat map.");
-		spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff);
+		spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff, SR_channel_delta);
 		print("Heatmap generation finished."); 
 	}
 	
@@ -333,8 +339,7 @@ function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, ba
 	//run("Threshold...");
 	run("Convert to Mask"); 
 	run("Analyze Particles...", "size=" + bacteria_size_minimum + "-" + bacteria_size_maximum + " circularity=" + bacteria_circularity_minimum + "-" + bacteria_circularity_maximum + " exclude clear add");
-	
-	print("TL scaled mask title prior to amendment function" + TL_scaled_mask);
+
 	amend_ROI_set(TL_scaled_mask);	
 	
 	for (i = 0; i < roiManager("count"); i++) {
@@ -397,14 +402,13 @@ function determine_and_apply_xy_offset(TL_scaled_mask, bacteria_size_minimum, ba
 }
 
 function amend_ROI_set(TL_scaled_mask){
-	print("Amend ROI set if required, image "+ TL_scaled_mask); 
 	selectWindow(TL_scaled_mask); 
 	roiManager("deselect");
 	waitForUser("In case any ROIs should be rejected for analysis, select the ROI by clicking on the numerical label in the image and then delete. \n Click ''OK'' when done."); 
 }
 
 // ##################### SPOT COUNTING ##################### 
-function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence){
+function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence, SR_channel_delta){
 	selectWindow(fluorescence_title); 
 	run("Set Measurements...", "area mean shape kurtosis redirect=None decimal=3");
 	roiManager("Open", file_path + File.separator + ROI_set_title);
@@ -422,7 +426,7 @@ function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_promi
 	for (i = 0; i < number_of_bacteria; i++) {
 	
 		Ch1_kurtosis[i] = getResult("Kurt", i);
-		Ch2_kurtosis[i] = getResult("Kurt", i + number_of_bacteria);
+		Ch2_kurtosis[i] = getResult("Kurt", i + (SR_channel_delta * number_of_bacteria));
 		if (Ch1_kurtosis[i] > kurtosis_cutoff) {
 			Ch1_class[i] = "spots";
 		} 
@@ -430,7 +434,7 @@ function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_promi
 			Ch1_class[i] = "homogeneous";
 		}
 		Ch1_mean[i] = getResult("Mean", i);
-		Ch2_mean[i] = getResult("Mean", i + number_of_bacteria);
+		Ch2_mean[i] = getResult("Mean", i + (SR_channel_delta * number_of_bacteria));
 		if (Ch2_kurtosis[i] > kurtosis_cutoff) {
 			Ch2_class[i] = "spots";
 		} 
@@ -444,8 +448,8 @@ function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_promi
 			
 	Ch1_spot_count = newArray(number_of_bacteria);
 	Ch2_spot_count = newArray(number_of_bacteria);
-	//loopStop = 20; 
-	loopStop = roiManager("count");
+	loopStop = 20; 
+	//loopStop = roiManager("count");
 	
 	// loop to count the number of spots per bacterium 
 	
@@ -477,7 +481,7 @@ function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_promi
 	run("Enhance Contrast", "saturated=0.01");
 	for(i=0; i<loopStop; i++) {
 		roiManager("select", i);
-		 Stack.setChannel(2);
+		Stack.setChannel(SR_channel_delta + 1);
 		run("Find Maxima...", "noise="+Ch2_prominence+" output=[Count]");
 		Ch2_spot_count[i] = getResult("Count", i);
 		run("Find Maxima...", "noise="+Ch2_prominence+" output=[Point Selection]");
@@ -521,7 +525,7 @@ function assemble_and_save_results(number_of_bacteria, Ch1_spot_count, Ch1_mean,
 
 // ##################### HEATMAP GENERATION #####################  
 
-function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff){
+function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, file_base_title, Ch1_prominence, Ch2_prominence, ROI_set_title, kurtosis_cutoff, SR_channel_delta){
 	//generate mask of bacteria bodies
 	roiManager("reset");
 	run("Select None");
@@ -532,7 +536,6 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	FL_height = height;
 	newImage("Untitled", "8-bit black", FL_width, FL_height, 1);
 	roiManager("Open", file_path + File.separator + ROI_set_combined_title);
-	//waitForUser("Has combined ROI set been opened?");
 	roiManager("select", 0);
 	run("Add...", "value=255");
 	bacteria_mask_file_title = file_base_title + "_objects";
@@ -549,12 +552,14 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	Dialog.addCheckbox("Spot sizes", false);
 	Dialog.addCheckbox("Intensity sum (spots only)", false);
 	Dialog.addCheckbox("Intensity sum (all bacteria)", false);
+	Dialog.addNumber("Heatmap aspect ratio", 1.0, 1, 10, " ");
 	Dialog.show();
 	
 	spot_peak_location_heatmap_choice = Dialog.getCheckbox();
 	spot_size_heatmap_choice = Dialog.getCheckbox();
 	intensity_sum_heatmap_choice = Dialog.getCheckbox();
 	intensity_sum_all_heatmap_choice = Dialog.getCheckbox();
+	aspect_ratio = Dialog.getNumber();
 	spots_image_title = "spots-locations";
 	spots_file_title = file_base_title + "_spots_locations";
 	newImage(spots_file_title, "8-bit grayscale-mode", FL_width, FL_height, FL_channels, 1, 1);
@@ -562,14 +567,14 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 	// ##################### HEATMAP PRE-PROCESSING ##################### 
 	
 	//set parameters for heatmap and create empty first heatmap image
-	aspect_ratio = 3.0;  
-	heatmap_height = 26; 
-	heatmap_width = Math.ceil(heatmap_height * aspect_ratio);
+
 	roiManager("open", file_path + File.separator + ROI_set_title);
 	ROI_initial_count = roiManager("count");
+	k = 1; 
 	
-	for (i = 0; i < channels; i++) {
-		channel_prominence_variable_name = "Ch" + (i+1) + "_prominence";
+	for (i = 0; i < channels; i+=SR_channel_delta) {
+		channel_prominence_variable_name = "Ch" + k + "_prominence";
+		k += 1; 
 		//print(channel_prominence_variable_name); 		
 		
 		spots_file_title = file_base_title + "_spots_locations";
@@ -577,18 +582,18 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 		if (spot_peak_location_heatmap_choice == true){ 	
 			roiManager("reset");
 			run("Select None"); 
-			spots_file_title = spots_file_title + "_Ch" + (i+1); 
+			spots_file_title = spots_file_title + "_Ch" + k; 
 			newImage(spots_file_title, "8-bit black", FL_width, FL_height, 1);
 			spots_file_ID = getImageID();
 			roiManager("reset");			
 			print("Channel" + (i+1) + " - Spot location heatmap generation");
-			points_ROI_file_title = file_base_title + "_Ch" + (i+1) + "_points.roi";
+			points_ROI_file_title = file_base_title + "_Ch" + k + "_points.roi";
 			selectWindow(fluorescence_title);
 			Stack.setChannel(i+1);
 			run("Select None");			
 			run("Hide Overlay");		
 			run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Point Selection]");
-			roiManager("Add");
+			roiManager("Add"); 
 			roiManager("select", 0);
 			roiManager("save", file_path + File.separator + points_ROI_file_title);
 			selectImage(spots_file_ID);
@@ -607,7 +612,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			roiManager("open", file_path + File.separator + ROI_set_title);
 			all_bacteria_choice = "no"; 
 			heatmap_stack_title = "Spot_peak_location";
-			heatmap_creation_loop(ROI_initial_count, spots_file_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice);
+			heatmap_creation_loop(ROI_initial_count, spots_file_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice, aspect_ratio);
 			run("Select None");
 		}
 		if (spot_size_heatmap_choice == true){
@@ -616,7 +621,8 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			selectWindow(fluorescence_title);
 			roiManager("deselect");
 			run("Select None");
-			Stack.setChannel(i+1);		
+			Stack.setChannel(i+1);	
+			print("Duplicating channel: " + (i+1)); 
 			run("Duplicate...", "duplicate channels="+(i+1));
 			run("Find Maxima...", "prominence=" + channel_prominence_variable_name + " output=[Maxima Within Tolerance]"); 
 			run("Subtract...", "value=254");
@@ -624,7 +630,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			rename(maxima_in_tolerance_file_title);		
 			all_bacteria_choice = "no"; 
 			heatmap_stack_title = "Maxima_in_tolerance";
-			heatmap_creation_loop(ROI_initial_count,maxima_in_tolerance_file_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice);
+			heatmap_creation_loop(ROI_initial_count,maxima_in_tolerance_file_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice, aspect_ratio);
 			roiManager("deselect");
 		}
 		
@@ -635,7 +641,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			Stack.setChannel(i+1);
 			all_bacteria_choice = "no"; 
 			heatmap_stack_title = "Intensity";
-			heatmap_creation_loop(ROI_initial_count, fluorescence_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice);
+			heatmap_creation_loop(ROI_initial_count, fluorescence_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice, aspect_ratio);
 			roiManager("deselect");
 			//rescale heatmap to between 0 and 1
 			//getMinAndMax(min, max);
@@ -653,7 +659,7 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 			Stack.setChannel(i+1);
 			all_bacteria_choice = "yes"; 
 			heatmap_stack_title = "Intensity_spots_and_homogeneous";
-			heatmap_creation_loop(ROI_initial_count, fluorescence_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice);
+			heatmap_creation_loop(ROI_initial_count, fluorescence_title, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice, aspect_ratio);
 			roiManager("deselect");
 			//rescale heatmap to between 0 and 1
 			//getMinAndMax(min, max);
@@ -668,18 +674,17 @@ function spot_heatmap(fluorescence_title, file_path, ROI_set_combined_title, fil
 }
 
 
-function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice){
+function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mask_file_title, bacteria_size_minimum, file_path, i, heatmap_stack_title, all_bacteria_choice, aspect_ratio){
 		counter = 0;
 		
-		//create an empty stack
-		aspect_ratio = 3.0;  
+		//create an empty stack  
 		heatmap_height = 26; 
 		heatmap_width = Math.ceil(heatmap_height * aspect_ratio);
 		newImage("Heatmap Stack", "16-bit black", heatmap_width, heatmap_height, ROI_initial_count);
 		heatmap_stack_ID = getImageID();
 		//loop over all ROIs
-		//for (k = 0; k < 20; k++) {
-		for (k = 0; k < ROI_initial_count; k++) {
+		for (k = 0; k < 20; k++) {
+		//for (k = 0; k < ROI_initial_count; k++) {
 			//print("Roi index: " + k); 
 			open_images = getList("image.titles");
 			//Array.print(open_images); 	
@@ -699,11 +704,8 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 
 			selectWindow(input_data_image);
 			roiManager("select", ROI_of_choice);	
-			//waitForUser("Is an ROI in the correct window selected? ");
 			run("Duplicate...", " duplicate channels=" + (i+1) + " title=Spots_ROI_CH" + (i+1) + "_object_" + k);		
-			//waitForUser("What does the duplicated image look like?");
 			run("Clear Outside");
-			//waitForUser("Does it still look the same?");
 			//rotate duplicated bacterial spots image by fit ellipse angle
 			run("Rotate... ", "angle=" + object_angle + " grid=1 interpolation=Bicubic enlarge"); 
 			rotated_object = getTitle();		
@@ -742,13 +744,15 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 					counter = counter + 1;
 					print("Rejected bacteria due to kurtosis: " + counter);  
 				}
+				else if (object_kurtosis == "NaN") {
+					print("Rejected bacteria due to ROI located outside of the image area");  
+				}
 			}
 			
 			selectImage(resized_rotated_spots_ID);
 			run("Select None");
 			run("Copy");
 			selectImage(heatmap_stack_ID); 
-			//waitForUser("Is the correct slice selected");
 			setSlice(k + 1);
 			run("Paste");
 			run("Enhance Contrast", "saturated=0.35");
@@ -773,7 +777,7 @@ function heatmap_creation_loop(ROI_initial_count, input_data_image, bacteria_mas
 		run("Enhance Contrast", "saturated=0.35");
 		saveAs("TIFF", file_path + File.separator + file_base_title + "_Ch" + (i + 1) + "_" + heatmap_stack_title + "_Heatmap_sum.tif");
 		close(); 
-		
+		print("Heatmap creation loop complete."); 
 	}
 
 
