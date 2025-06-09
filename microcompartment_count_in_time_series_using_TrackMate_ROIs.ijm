@@ -25,6 +25,8 @@ run("Fresh Start");
 #@ Integer(label="Ch1 Prominence: " , value = 1000) Ch1_prominence
 #@ Integer(label="Ch2_prominence: " , value = 1000) Ch2_prominence
 #@ Double(label="Intensity histogram kurtosis cutoff value: ", value = 3.0) kurtosis_cutoff
+#@ String(label = "Limit number of processed ROIs to 10% (of sum of ROIS across all time frames) for testing purposes?", choices={"No","Yes"}, style="radioButtonHorizontal") limit_ROIS_choice
+
 
 file_path = File.getDirectory(segmentation_inputFile);
 segmentation_title = File.getName(segmentation_inputFile);
@@ -56,6 +58,10 @@ skewness = newArray();
 kurtosis = newArray(); 
 area = newArray; 
 solidity = newArray();
+feret = newArray();
+max_grey = newArray();
+median_grey = newArray();
+mean_grey = newArray();
 classification = newArray();
 
 counter = 0; 
@@ -66,13 +72,34 @@ if (roiManager("count") > 0) {
 	for (ch = 1; ch <=2; ch++){
 	    //selectWindow("C" + ch + "-" + original_name_no_ext);
 	    selectImage(original_ID);
-	    //for (k = 0; k < 100; k++){
-	    for (k = 0; k < roiManager("count"); k++){
+	    if (limit_ROIS_choice == "No") { 
+	    	loopStop = ROI_count; 
+	    }
+	    else if (limit_ROIS_choice == "Yes"){
+	    	loopStop = Math.floor(ROI_count/10); 
+	    }
+	    //print("Loop Stop: " + loopStop); 
+	    for (k = 0; k < loopStop; k++){
 	    	//print("Frame " + i + ", Channel " + ch + ", ROI " + k);
 	    	Stack.getPosition(channel, slice, frame);
 	    	roiManager("select", k);
 	    	Stack.setChannel(ch); 
 	    	//run("Draw", "slice");
+	    	List.setMeasurements; 
+			skewness[counter] = getValue("Skew");
+			kurtosis[counter] = getValue("Kurt"); 
+			area[counter] = getValue("Area");
+			solidity[counter] = getValue("Solidity");
+			if (kurtosis[counter] > kurtosis_cutoff) {
+				classification[counter] = "spots";
+			} 
+			else{
+				classification[counter] = "homogeneous";
+			}
+			feret[counter] = getValue("Feret");
+			max_grey[counter] = getValue("Maximum");
+			median_grey[counter] = getValue("Median");
+			mean_grey[counter] = getValue("Mean");
 	    	run("Find Maxima...", "noise=Ch" + ch + "_prominence output=[Count]");
 	    	channel_index[counter] = ch;
 			spot_count[counter] = getResult("Count", counter);
@@ -85,34 +112,9 @@ if (roiManager("count") > 0) {
 	    }	
 	}
 	run("Clear Results");
-	for (ch = 1; ch <=2; ch++){
-		//selectWindow("C" + ch + "-" + original_name_no_ext);
-		selectImage(original_ID);
-	    //for (k = 0; k < 100; k++){
-	    for (k = 0; k < roiManager("count"); k++){
-	    	//print("Frame " + i + ", Channel " + ch + ", ROI " + k);
-	    	roiManager("select", k);
-	    	Stack.setChannel(ch);
-			roiManager("measure");
-			skewness[counter_another_one] = getResult("Skew", counter_another_one);
-			kurtosis[counter_another_one] = getResult("Kurt", counter_another_one); 
-			area[counter_another_one] = getResult("Area", counter_another_one);
-			solidity[counter_another_one] = getResult("Solidity", counter_another_one);
-			if (kurtosis[counter_another_one] > kurtosis_cutoff) {
-				classification[counter_another_one] = "spots";
-			} 
-			else{
-				classification[counter_another_one] = "homogeneous";
-			}
-			counter_another_one++;
-			//print("Another counter: " + counter_another_one); 
-	    }	
-	}
-	run("Clear Results");
 	roiManager("reset");
 	run("Select None"); 	
 }
-
 
 Table.create(original_name_no_ext + "_Measurements");
 Table.setColumn("Channel index", channel_index);
@@ -124,6 +126,10 @@ Table.setColumn("Skewness", skewness);
 Table.setColumn("Kurtosis", kurtosis); 
 Table.setColumn("Area", area); 
 Table.setColumn("Solidity", solidity); 
+Table.setColumn("Feret diameter", feret); 
+Table.setColumn("Max Grey Value", max_grey); 
+Table.setColumn("Median Grey Valye", median_grey); 
+Table.setColumn("Mean Grey Value", mean_grey); 
 
 Table.save(directory + File.separator + original_name_no_ext + "_Measurements.csv");
 run("Clear Results");
