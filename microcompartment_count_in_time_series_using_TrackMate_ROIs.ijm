@@ -97,7 +97,7 @@ if (roiManager("count") > 0) {
 				classification[counter] = "homogeneous";
 			}
 			feret[counter] = getValue("Feret");
-			max_grey[counter] = getValue("Maximum");
+			max_grey[counter] = getValue("Max");
 			median_grey[counter] = getValue("Median");
 			mean_grey[counter] = getValue("Mean");
 	    	run("Find Maxima...", "noise=Ch" + ch + "_prominence output=[Count]");
@@ -135,3 +135,4 @@ Table.save(directory + File.separator + original_name_no_ext + "_Measurements.cs
 run("Clear Results");
 
 waitForUser("Done!");
+
