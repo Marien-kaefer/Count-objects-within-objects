@@ -410,7 +410,7 @@ function amend_ROI_set(TL_scaled_mask){
 // ##################### SPOT COUNTING ##################### 
 function spot_counting(fluorescence_title, file_path, file_base_title, Ch1_prominence, Ch2_prominence, SR_channel_delta){
 	selectWindow(fluorescence_title); 
-	run("Set Measurements...", "area mean shape kurtosis redirect=None decimal=3");
+	run("Set Measurements...", "area mean integrated shape kurtosis redirect=None decimal=3");
 	roiManager("Open", file_path + File.separator + ROI_set_title);
 	roiManager("Deselect");
 	roiManager("multi-measure measure_all");
